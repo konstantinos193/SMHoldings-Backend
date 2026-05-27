@@ -5,13 +5,24 @@ import { RefundPaymentDto } from './dto/refund-payment.dto';
 import { PaymentResponseDto } from './dto/payment-response.dto';
 import { CreatePublicCheckoutSessionDto } from './dto/create-public-checkout-session.dto';
 import Stripe from 'stripe';
+
+type StripeInstance = ReturnType<typeof Stripe>;
+type StripeEvent = ReturnType<StripeInstance['webhooks']['constructEvent']>;
+type StripePaymentIntent = { id: string };
+type StripeCheckoutSession = {
+  id: string;
+  metadata?: Record<string, string> | null;
+  client_reference_id?: string | null;
+  payment_intent?: string | { id: string } | null;
+  payment_status?: string | null;
+};
 import { PaymentStatus, PaymentMethod } from '../database/types';
 import { BookingsService } from '../bookings/bookings.service';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class PaymentsService {
-  private stripe: Stripe;
+  private stripe: InstanceType<typeof Stripe>;
 
   constructor(
     private prisma: PrismaService,
@@ -376,7 +387,7 @@ export class PaymentsService {
       throw new BadRequestException('Stripe webhook secret not configured');
     }
 
-    let event: Stripe.Event;
+    let event: StripeEvent;
 
     try {
       event = this.stripe.webhooks.constructEvent(payload, signature, webhookSecret);
@@ -388,7 +399,7 @@ export class PaymentsService {
     switch (event.type) {
       case 'payment_intent.succeeded':
         try {
-          await this.confirmPayment((event.data.object as Stripe.PaymentIntent).id);
+          await this.confirmPayment((event.data.object as StripePaymentIntent).id);
         } catch (error) {
           // Some Stripe flows may trigger this before we store a matching payment record.
           if (!(error instanceof NotFoundException)) {
@@ -402,7 +413,7 @@ export class PaymentsService {
         break;
 
       case 'checkout.session.completed':
-        await this.handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session);
+        await this.handleCheckoutSessionCompleted(event.data.object as StripeCheckoutSession);
         break;
 
       case 'charge.refunded':
@@ -432,7 +443,7 @@ export class PaymentsService {
     }
   }
 
-  private async handleCheckoutSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  private async handleCheckoutSessionCompleted(session: StripeCheckoutSession): Promise<void> {
     const bookingId = session.metadata?.bookingId || session.client_reference_id;
 
     if (!bookingId) {
