@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { CacheModule } from '@nestjs/cache-manager';
+import KeyvRedis from '@keyv/redis';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -38,6 +40,19 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+    CacheModule.registerAsync({
+      isGlobal: true,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        stores: [
+          new KeyvRedis(
+            config.get<string>('REDIS_URL', 'redis://redis:6379'),
+            { namespace: 'stefanos' },
+          ),
+        ],
+        ttl: 0, // per-call TTL; no global default
+      }),
     }),
     DatabaseModule,
     AuthModule,

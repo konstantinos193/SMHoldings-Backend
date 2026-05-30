@@ -1,6 +1,9 @@
+import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export class AuditUtil {
+  private static readonly logger = new Logger('AuditUtil');
+
   static async log(
     prisma: PrismaService,
     userId: string,
@@ -26,7 +29,7 @@ export class AuditUtil {
       });
     } catch (error) {
       // Don't throw - audit logging should not break the application
-      console.error('Audit logging failed:', error);
+      AuditUtil.logger.error(`Audit logging failed: ${error}`);
     }
   }
 }

@@ -4,8 +4,47 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
-import { connectWithRetry, retryOperation, delay } from './lib/connection-retry';
 import { validateConnectionString } from './lib/mongodb-connection';
+
+// ─── Seed-local retry utilities (inlined from deleted lib/connection-retry) ───
+
+async function connectWithRetry(prisma: PrismaClient, maxRetries = 5, initialDelay = 2000): Promise<void> {
+  let d = initialDelay;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await prisma.$connect();
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('✅ Database connection successful');
+      return;
+    } catch (err: any) {
+      if (i === maxRetries - 1) throw err;
+      console.log(`   ⚠️  Connection attempt ${i + 1}/${maxRetries} failed, retrying in ${d}ms...`);
+      await delay(d);
+      d *= 2;
+    }
+  }
+}
+
+async function retryOperation<T>(operation: () => Promise<T>, name: string, prisma: PrismaClient, maxRetries = 5, initialDelay = 1000): Promise<T> {
+  let d = initialDelay;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (err: any) {
+      const isConnection = err.code === 'P2010' || /timeout|connection|ECONNREFUSED|ENOTFOUND/.test(err.message || '');
+      if (i === maxRetries - 1 || !isConnection) throw err;
+      console.log(`   ⚠️  ${name} failed (attempt ${i + 1}/${maxRetries}), retrying in ${d}ms...`);
+      await delay(d);
+      d = Math.round(d * 1.5);
+      try { await prisma.$connect(); } catch { /* ignore reconnect errors */ }
+    }
+  }
+  throw new Error(`${name} failed after ${maxRetries} retries`);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // Load environment variables
 dotenv.config();

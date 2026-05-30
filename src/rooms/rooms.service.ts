@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreatePricingRuleDto, UpdatePricingRuleDto } from './dto/create-pricing-rule.dto';
+import { computeNightlySubtotal } from '../common/utils/price.util';
 
 @Injectable()
 export class RoomsService {
@@ -290,28 +291,13 @@ export class RoomsService {
       select: { roomId: true, startDate: true, endDate: true, priceOverride: true },
     });
 
-    const nights = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-
     return availableRooms.map((room) => {
       const roomRules = priceRules.filter((r) => r.roomId === room.id);
-      if (roomRules.length === 0 || nights === 0) {
+      if (roomRules.length === 0) {
         return { ...room, effectivePrice: room.basePrice };
       }
-
-      let subtotal = 0;
-      const current = new Date(startDate);
-      current.setHours(0, 0, 0, 0);
-      const end = new Date(endDate);
-      end.setHours(0, 0, 0, 0);
-
-      while (current < end) {
-        const rule = roomRules.find(
-          (r) => new Date(r.startDate) <= current && new Date(r.endDate) > current,
-        );
-        subtotal += rule?.priceOverride ?? room.basePrice;
-        current.setDate(current.getDate() + 1);
-      }
-
+      const { subtotal, nights } = computeNightlySubtotal(room.basePrice, roomRules, startDate, endDate);
+      if (nights === 0) return { ...room, effectivePrice: room.basePrice };
       return { ...room, effectivePrice: Math.round((subtotal / nights) * 100) / 100 };
     });
   }
@@ -623,23 +609,7 @@ export class RoomsService {
 
     if (!room) throw new NotFoundException('Room not found');
 
-    let subtotal = 0;
-    let nights = 0;
-    const current = new Date(checkIn);
-    current.setHours(0, 0, 0, 0);
-    const end = new Date(checkOut);
-    end.setHours(0, 0, 0, 0);
-
-    while (current < end) {
-      const rule = room.availabilityRules.find(
-        (r) => new Date(r.startDate) <= current && new Date(r.endDate) > current,
-      );
-      subtotal += rule?.priceOverride ?? room.basePrice;
-      nights++;
-      current.setDate(current.getDate() + 1);
-    }
-
-    return { subtotal, nights };
+    return computeNightlySubtotal(room.basePrice, room.availabilityRules, checkIn, checkOut);
   }
 
   private parseSearchDates(checkIn: string, checkOut: string) {

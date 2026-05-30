@@ -79,7 +79,7 @@ export class MessagesController {
   @ApiResponse({ status: 200, description: 'Message updated successfully' })
   @Roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.PROPERTY_OWNER)
   async update(@Param('id') id: string, @Body() updateMessageDto: UpdateMessageDto) {
-    return this.messagesService.markAsRead(id);
+    return this.messagesService.update(id, updateMessageDto);
   }
 
   @Delete(':id')

@@ -108,7 +108,6 @@ export class UsersService {
                 id: true,
                 titleGr: true,
                 titleEn: true,
-                images: true,
                 city: true,
               },
             },

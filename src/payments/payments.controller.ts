@@ -19,6 +19,7 @@ import { PaymentResponseDto } from './dto/payment-response.dto';
 import { CreatePublicCheckoutSessionDto } from './dto/create-public-checkout-session.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 import { Public } from '../common/decorators/public.decorator';
 
 @Controller('payments')
@@ -35,8 +36,9 @@ export class PaymentsController {
     @Query('bookingId') bookingId: string,
     @Query('propertyId') propertyId: string,
     @CurrentUser() userId: string,
+    @CurrentUserWithRole() authUser: any,
   ) {
-    return this.paymentsService.getAll({ page: +page || 1, limit: +limit || 10, status, method, bookingId, propertyId }, userId);
+    return this.paymentsService.getAll({ page: +page || 1, limit: +limit || 10, status, method, bookingId, propertyId }, userId, authUser?.role);
   }
 
   @Post('public/checkout-session')
@@ -78,9 +80,9 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   async refundPayment(
     @Body() refundPaymentDto: RefundPaymentDto,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ): Promise<PaymentResponseDto> {
-    return this.paymentsService.refundPayment(refundPaymentDto, userId);
+    return this.paymentsService.refundPayment(refundPaymentDto, user?.userId ?? user?.id, user?.role);
   }
 
   @Post(':id/refund')
@@ -88,17 +90,17 @@ export class PaymentsController {
   async refundPaymentById(
     @Param('id') id: string,
     @Body() body: { amount?: number; reason?: string },
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ): Promise<PaymentResponseDto> {
-    return this.paymentsService.refundById(id, body.amount, body.reason, userId);
+    return this.paymentsService.refundById(id, body.amount, body.reason, user?.userId ?? user?.id, user?.role);
   }
 
   @Get(':id')
   async getPayment(
     @Param('id') id: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ): Promise<PaymentResponseDto> {
-    return this.paymentsService.getPaymentById(id, userId);
+    return this.paymentsService.getPaymentById(id, user?.userId ?? user?.id, user?.role);
   }
 
   @Get('owner/payouts')
@@ -110,17 +112,17 @@ export class PaymentsController {
   async schedulePayout(
     @Param('id') id: string,
     @Body() body: { scheduledFor: string },
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.paymentsService.schedulePayout(id, body.scheduledFor, userId);
+    return this.paymentsService.schedulePayout(id, body.scheduledFor, user?.userId ?? user?.id, user?.role);
   }
 
   @Patch(':id/mark-payout-sent')
   async markPayoutSent(
     @Param('id') id: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.paymentsService.markPayoutSent(id, userId);
+    return this.paymentsService.markPayoutSent(id, user?.userId ?? user?.id, user?.role);
   }
 
   @Post('webhook')

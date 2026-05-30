@@ -70,20 +70,14 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto, mfaCode?: string) {
-    let email = loginDto.email;
-    if (!email.includes('@')) {
-      email = `${email}@stefanos.com`;
-    }
+    const rawInput = loginDto.email;
+    const email = rawInput.includes('@') ? rawInput : `${rawInput}@stefanos.com`;
 
-    let user = await this.prisma.user.findUnique({
-      where: { email },
+    const user = await this.prisma.user.findFirst({
+      where: rawInput.includes('@')
+        ? { email }
+        : { OR: [{ email }, { name: rawInput }] },
     });
-
-    if (!user && !loginDto.email.includes('@')) {
-      user = await this.prisma.user.findFirst({
-        where: { name: loginDto.email },
-      });
-    }
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -190,28 +184,17 @@ export class AuthService {
   }
 
   async disableMFA(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true },
-    });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodes: [] as any },
+      });
+    } catch (e: any) {
+      if (e?.code === 'P2025') throw new UnauthorizedException('User not found');
+      throw e;
     }
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        mfaEnabled: false,
-        mfaSecret: null,
-        mfaBackupCodes: [] as any,
-      },
-    });
-
-    return {
-      success: true,
-      message: 'MFA disabled',
-    };
+    return { success: true, message: 'MFA disabled' };
   }
 
   async verifyMFACode(user: any, code: string): Promise<boolean> {
@@ -223,6 +206,10 @@ export class AuthService {
   }
 
   async sendEmailOTP(userId: string): Promise<{ success: boolean; message: string }> {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {

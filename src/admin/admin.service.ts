@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -13,50 +9,41 @@ export class AdminService {
     const [
       totalUsers,
       totalProperties,
-      totalBookings,
+      bookingCounts,
       totalRevenue,
-      activeBookings,
-      pendingBookings,
       recentBookings,
       recentUsers,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.property.count(),
-      this.prisma.booking.count(),
+      this.prisma.booking.groupBy({
+        by: ['status'],
+        _count: { id: true },
+      }),
       this.prisma.booking.aggregate({
         _sum: { totalPrice: true },
         where: { paymentStatus: 'COMPLETED' },
-      }),
-      this.prisma.booking.count({
-        where: { status: { in: ['CONFIRMED', 'CHECKED_IN'] } },
-      }),
-      this.prisma.booking.count({
-        where: { status: 'PENDING' },
       }),
       this.prisma.booking.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
         include: {
-          property: {
-            select: { titleEn: true, titleGr: true },
-          },
-          guest: {
-            select: { name: true, email: true },
-          },
+          property: { select: { titleEn: true, titleGr: true } },
+          guest: { select: { name: true, email: true } },
         },
       }),
       this.prisma.user.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          createdAt: true,
-        },
+        select: { id: true, name: true, email: true, role: true, createdAt: true },
       }),
     ]);
+
+    const totalBookings = bookingCounts.reduce((sum, b) => sum + b._count.id, 0);
+    const activeBookings = bookingCounts
+      .filter((b) => b.status === 'CONFIRMED' || b.status === 'CHECKED_IN')
+      .reduce((sum, b) => sum + b._count.id, 0);
+    const pendingBookings = bookingCounts.find((b) => b.status === 'PENDING')?._count.id ?? 0;
 
     return {
       overview: {
@@ -187,22 +174,13 @@ export class AdminService {
     };
   }
 
-  async updateUserRole(userId: string, newRole: string, adminId: string) {
+  async updateUserRole(userId: string, newRole: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
-    }
-
-    // Verify admin
-    const admin = await this.prisma.user.findUnique({
-      where: { id: adminId },
-    });
-
-    if (!admin || admin.role !== 'ADMIN') {
-      throw new ForbiddenException('Only admins can update user roles');
     }
 
     return this.prisma.user.update({
@@ -218,22 +196,13 @@ export class AdminService {
     });
   }
 
-  async toggleUserStatus(userId: string, adminId: string) {
+  async toggleUserStatus(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
-    }
-
-    // Verify admin
-    const admin = await this.prisma.user.findUnique({
-      where: { id: adminId },
-    });
-
-    if (!admin || admin.role !== 'ADMIN') {
-      throw new ForbiddenException('Only admins can update user status');
     }
 
     return this.prisma.user.update({
@@ -322,8 +291,8 @@ export class AdminService {
       },
       bookings: bookings.map((b) => ({
         id: b.id,
-        property: b.property.titleEn,
-        owner: b.property.owner.name,
+        property: b.property?.titleEn ?? null,
+        owner: b.property?.owner?.name ?? null,
         totalPrice: b.totalPrice,
         platformFee: b.platformFee,
         ownerRevenue: b.ownerRevenue,

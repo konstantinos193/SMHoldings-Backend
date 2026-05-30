@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { RefundPaymentDto } from './dto/refund-payment.dto';
@@ -22,6 +22,7 @@ import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class PaymentsService {
+  private readonly logger = new Logger(PaymentsService.name);
   private stripe: InstanceType<typeof Stripe>;
 
   constructor(
@@ -267,6 +268,7 @@ export class PaymentsService {
   async refundPayment(
     refundPaymentDto: RefundPaymentDto,
     userId: string,
+    userRole?: string,
   ): Promise<PaymentResponseDto> {
     const payment = await this.prisma.payment.findUnique({
       where: { id: refundPaymentDto.paymentId },
@@ -277,10 +279,8 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // Verify user has permission (owner or admin)
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isOwner = payment.property.ownerId === userId;
-    const isAdmin = user?.role === 'ADMIN';
+    const isAdmin = userRole === 'ADMIN';
 
     if (!isOwner && !isAdmin) {
       throw new BadRequestException('Unauthorized to refund this payment');
@@ -384,7 +384,7 @@ export class PaymentsService {
         break;
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        this.logger.log(`Unhandled Stripe event type: ${event.type}`);
     }
   }
 
@@ -450,7 +450,7 @@ export class PaymentsService {
           paymentMethod: 'credit_card',
         });
       } catch (err) {
-        console.error('[Stripe webhook] Failed to create booking from session metadata:', err);
+        this.logger.error(`Failed to create booking from Stripe session metadata: ${err}`);
         return;
       }
 
@@ -543,7 +543,7 @@ export class PaymentsService {
     }
   }
 
-  async getPaymentById(paymentId: string, userId: string): Promise<PaymentResponseDto> {
+  async getPaymentById(paymentId: string, userId: string, userRole?: string): Promise<PaymentResponseDto> {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
       include: { booking: true, property: true },
@@ -553,11 +553,9 @@ export class PaymentsService {
       throw new NotFoundException('Payment not found');
     }
 
-    // Verify user has access
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isGuest = payment.booking.guestId === userId;
     const isOwner = payment.property.ownerId === userId;
-    const isAdmin = user?.role === 'ADMIN';
+    const isAdmin = userRole === 'ADMIN';
 
     if (!isGuest && !isOwner && !isAdmin) {
       throw new BadRequestException('Unauthorized to view this payment');
@@ -573,13 +571,12 @@ export class PaymentsService {
     method?: string;
     bookingId?: string;
     propertyId?: string;
-  }, userId: string): Promise<any> {
+  }, userId: string, userRole?: string): Promise<any> {
     const page = +( params.page || 1);
     const limit = +(params.limit || 10);
     const skip = (page - 1) * limit;
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
 
     const where: any = {};
     if (!isAdmin) {
@@ -614,16 +611,15 @@ export class PaymentsService {
     };
   }
 
-  async refundById(paymentId: string, amount: number | undefined, reason: string | undefined, userId: string): Promise<PaymentResponseDto> {
-    return this.refundPayment({ paymentId, amount, reason }, userId);
+  async refundById(paymentId: string, amount: number | undefined, reason: string | undefined, userId: string, userRole?: string): Promise<PaymentResponseDto> {
+    return this.refundPayment({ paymentId, amount, reason }, userId, userRole);
   }
 
-  async schedulePayout(paymentId: string, scheduledFor: string, userId: string) {
+  async schedulePayout(paymentId: string, scheduledFor: string, userId: string, userRole?: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId }, include: { property: true } });
     if (!payment) throw new NotFoundException('Payment not found');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
     const isOwner = payment.property?.ownerId === userId;
     if (!isAdmin && !isOwner) throw new BadRequestException('Unauthorized');
 
@@ -634,12 +630,11 @@ export class PaymentsService {
     return { success: true, data: this.mapToResponseDto(updated) };
   }
 
-  async markPayoutSent(paymentId: string, userId: string) {
+  async markPayoutSent(paymentId: string, userId: string, userRole?: string) {
     const payment = await this.prisma.payment.findUnique({ where: { id: paymentId }, include: { property: true } });
     if (!payment) throw new NotFoundException('Payment not found');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
     if (!isAdmin) throw new BadRequestException('Only admins can mark payouts as sent');
 
     const updated = await this.prisma.payment.update({

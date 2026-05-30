@@ -1,7 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../upload/upload.service';
 import { MediaCategory } from '../database/types';
@@ -20,9 +17,11 @@ interface UploadedFile {
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     private prisma: PrismaService,
-    private uploadService: UploadService
+    private uploadService: UploadService,
   ) {}
 
   async upload(file: UploadedFile, category: MediaCategory = MediaCategory.GENERAL, altTextGr?: string, altTextEn?: string) {
@@ -100,7 +99,7 @@ export class MediaService {
       }
     } catch (error) {
       // Log but don't fail if Cloudinary deletion fails
-      console.warn('Failed to delete image from Cloudinary:', error);
+      this.logger.warn(`Failed to delete image from Cloudinary: ${error}`);
     }
 
     await this.prisma.media.delete({

@@ -236,7 +236,7 @@ export class ExternalBookingsService {
   async findByExternalId(source: string, externalId: string) {
     const booking = await this.prisma.booking.findFirst({
       where: {
-        source: source as any,
+        source: source.toUpperCase() as any,
         externalId,
       },
       include: {
@@ -393,6 +393,10 @@ export class ExternalBookingsService {
    * Bulk import multiple external bookings (e.g. initial sync from a platform)
    */
   async bulkImport(bookings: CreateExternalBookingDto[]) {
+    if (!Array.isArray(bookings) || bookings.length === 0) {
+      throw new BadRequestException('Request body must be a non-empty array of bookings');
+    }
+
     const results: { success: boolean; externalId: string; internalId?: string; error?: string }[] = [];
 
     for (const dto of bookings) {

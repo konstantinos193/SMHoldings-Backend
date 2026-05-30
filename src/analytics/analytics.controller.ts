@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 import { AnalyticsPeriod } from '../database/types';
 
 @Controller('analytics')
@@ -14,9 +14,9 @@ export class AnalyticsController {
     @Query('period') period: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.analyticsService.getDashboardMetrics(userId, period || 'MONTHLY', startDate, endDate);
+    return this.analyticsService.getDashboardMetrics(user?.userId ?? user?.id, user?.role, period || 'MONTHLY', startDate, endDate);
   }
 
   @Get('revenue-chart')
@@ -24,9 +24,9 @@ export class AnalyticsController {
     @Query('period') period: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.analyticsService.getRevenueChart(userId, period || 'MONTHLY', startDate, endDate);
+    return this.analyticsService.getRevenueChart(user?.userId ?? user?.id, user?.role, period || 'MONTHLY', startDate, endDate);
   }
 
   @Get('booking-trends')
@@ -34,14 +34,14 @@ export class AnalyticsController {
     @Query('period') period: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.analyticsService.getBookingTrends(userId, period || 'MONTHLY', startDate, endDate);
+    return this.analyticsService.getBookingTrends(user?.userId ?? user?.id, user?.role, period || 'MONTHLY', startDate, endDate);
   }
 
   @Get('user-distribution')
-  getUserDistribution(@CurrentUser() userId: string) {
-    return this.analyticsService.getUserDistribution(userId);
+  getUserDistribution(@CurrentUserWithRole() user: any) {
+    return this.analyticsService.getUserDistribution(user?.userId ?? user?.id, user?.role);
   }
 
   @Get('activity')
@@ -49,9 +49,9 @@ export class AnalyticsController {
     @Query('period') period: string,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.analyticsService.getActivityData(userId, period || 'MONTHLY', startDate, endDate);
+    return this.analyticsService.getActivityData(user?.userId ?? user?.id, user?.role, period || 'MONTHLY', startDate, endDate);
   }
 
   @Get('property/:propertyId')
@@ -60,22 +60,23 @@ export class AnalyticsController {
     @Query('period') period: AnalyticsPeriod,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
     return this.analyticsService.getPropertyAnalytics(
       propertyId,
       period,
       new Date(startDate),
       new Date(endDate),
-      userId,
+      user?.userId ?? user?.id,
+      user?.role,
     );
   }
 
   @Get('financial')
   getFinancialAnalytics(
     @Query('period') period: AnalyticsPeriod,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.analyticsService.getFinancialAnalytics(userId, period);
+    return this.analyticsService.getFinancialAnalytics(user?.userId ?? user?.id, period);
   }
 }

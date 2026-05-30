@@ -185,6 +185,11 @@ export class MessagesService {
   }
 
   async markAsRead(id: string) {
+    const existing = await this.prisma.message.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Message not found');
+    }
+
     const updatedMessage = await this.prisma.message.update({
       where: { id },
       data: { isRead: true },
@@ -211,6 +216,32 @@ export class MessagesService {
               },
             },
           },
+        },
+      },
+    });
+
+    return {
+      success: true,
+      data: updatedMessage,
+    };
+  }
+
+  async update(id: string, dto: { content?: string; type?: string; isRead?: boolean }) {
+    const existing = await this.prisma.message.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('Message not found');
+    }
+
+    const updatedMessage = await this.prisma.message.update({
+      where: { id },
+      data: {
+        ...(dto.content !== undefined && { content: dto.content }),
+        ...(dto.type !== undefined && { type: dto.type as any }),
+        ...(dto.isRead !== undefined && { isRead: dto.isRead }),
+      },
+      include: {
+        sender: {
+          select: { id: true, name: true, email: true, avatar: true },
         },
       },
     });

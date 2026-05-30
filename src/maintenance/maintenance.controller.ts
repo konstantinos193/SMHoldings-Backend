@@ -14,6 +14,7 @@ import { CreateMaintenanceRequestDto } from './dto/create-maintenance-request.dt
 import { UpdateMaintenanceRequestDto } from './dto/update-maintenance-request.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -31,6 +32,7 @@ export class MaintenanceController {
     @Query('priority') priority?: string,
     @Query('propertyId') propertyId?: string,
     @CurrentUser() userId?: string,
+    @CurrentUserWithRole() authUser?: any,
   ) {
     return this.maintenanceService.findAll({
       page: page ? parseInt(page) : 1,
@@ -39,42 +41,43 @@ export class MaintenanceController {
       priority,
       propertyId,
       userId,
+      userRole: authUser?.role,
     });
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.maintenanceService.findOne(id, userId);
+  findOne(@Param('id') id: string, @CurrentUserWithRole() user: any) {
+    return this.maintenanceService.findOne(id, user?.userId ?? user?.id, user?.role);
   }
 
   @Post()
   create(
     @Body() createMaintenanceRequestDto: CreateMaintenanceRequestDto,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.maintenanceService.create(createMaintenanceRequestDto, userId);
+    return this.maintenanceService.create(createMaintenanceRequestDto, user?.userId ?? user?.id, user?.role);
   }
 
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() updateMaintenanceRequestDto: UpdateMaintenanceRequestDto,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.maintenanceService.update(id, updateMaintenanceRequestDto, userId);
+    return this.maintenanceService.update(id, updateMaintenanceRequestDto, user?.userId ?? user?.id, user?.role);
   }
 
   @Post(':id/assign')
   assign(
     @Param('id') id: string,
     @Body('assignedTo') assignedTo: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.maintenanceService.assign(id, assignedTo, userId);
+    return this.maintenanceService.assign(id, assignedTo, user?.userId ?? user?.id, user?.role);
   }
 
   @Post(':id/complete')
-  complete(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.maintenanceService.complete(id, userId);
+  complete(@Param('id') id: string, @CurrentUserWithRole() user: any) {
+    return this.maintenanceService.complete(id, user?.userId ?? user?.id, user?.role);
   }
 }

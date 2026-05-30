@@ -82,23 +82,20 @@ export class AnalyticsService {
     return Math.round(((curr - prev) / prev) * 1000) / 10;
   }
 
-  private async isAdmin(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-    return user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  private isAdmin(userRole: string): boolean {
+    return userRole === 'ADMIN' || userRole === 'MANAGER';
   }
 
   // ─── Dashboard metrics ────────────────────────────────────────────────────────
 
   async getDashboardMetrics(
     userId: string,
+    userRole: string,
     period: string,
     startDateStr?: string,
     endDateStr?: string,
   ) {
-    const admin = await this.isAdmin(userId);
+    const admin = this.isAdmin(userRole);
     const { startDate, endDate } = this.resolveDates(period, startDateStr, endDateStr);
 
     const durationMs = endDate.getTime() - startDate.getTime();
@@ -157,11 +154,12 @@ export class AnalyticsService {
 
   async getRevenueChart(
     userId: string,
+    userRole: string,
     period: string,
     startDateStr?: string,
     endDateStr?: string,
   ) {
-    const admin = await this.isAdmin(userId);
+    const admin = this.isAdmin(userRole);
     const { startDate, endDate } = this.resolveDates(period, startDateStr, endDateStr);
 
     const where: any = {
@@ -202,11 +200,12 @@ export class AnalyticsService {
 
   async getBookingTrends(
     userId: string,
+    userRole: string,
     period: string,
     startDateStr?: string,
     endDateStr?: string,
   ) {
-    const admin = await this.isAdmin(userId);
+    const admin = this.isAdmin(userRole);
     const { startDate, endDate } = this.resolveDates(period, startDateStr, endDateStr);
 
     const where: any = { createdAt: { gte: startDate, lte: endDate } };
@@ -241,8 +240,8 @@ export class AnalyticsService {
 
   // ─── User distribution ────────────────────────────────────────────────────────
 
-  async getUserDistribution(userId: string) {
-    const admin = await this.isAdmin(userId);
+  async getUserDistribution(userId: string, userRole: string) {
+    const admin = this.isAdmin(userRole);
     if (!admin) return { success: true, data: [] };
 
     const grouped = await this.prisma.user.groupBy({
@@ -275,11 +274,12 @@ export class AnalyticsService {
 
   async getActivityData(
     userId: string,
+    userRole: string,
     period: string,
     startDateStr?: string,
     endDateStr?: string,
   ) {
-    const admin = await this.isAdmin(userId);
+    const admin = this.isAdmin(userRole);
     const { startDate, endDate } = this.resolveDates(period, startDateStr, endDateStr);
 
     const bookingWhere: any = {
@@ -337,6 +337,7 @@ export class AnalyticsService {
     startDate: Date,
     endDate: Date,
     userId: string,
+    userRole: string,
   ) {
     const property = await this.prisma.property.findUnique({
       where: { id: propertyId },
@@ -346,9 +347,8 @@ export class AnalyticsService {
       throw new NotFoundException('Property not found');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isOwner = property.ownerId === userId;
-    const isAdminUser = user?.role === 'ADMIN';
+    const isAdminUser = this.isAdmin(userRole);
 
     if (!isOwner && !isAdminUser) {
       throw new ForbiddenException('Unauthorized to view analytics');

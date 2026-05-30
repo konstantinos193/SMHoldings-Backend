@@ -19,37 +19,19 @@ export class MaintenanceService {
     priority?: string;
     propertyId?: string;
     userId?: string;
+    userRole?: string;
   }) {
-    const { page, limit, status, priority, propertyId, userId } = params;
+    const { page, limit, status, priority, propertyId, userId, userRole } = params;
     const skip = (page - 1) * limit;
 
-    // Build where clause
     const where: any = {};
 
-    if (status) {
-      where.status = status as MaintenanceStatus;
-    }
+    if (status) where.status = status as MaintenanceStatus;
+    if (priority) where.priority = priority as MaintenancePriority;
+    if (propertyId) where.propertyId = propertyId;
 
-    if (priority) {
-      where.priority = priority as MaintenancePriority;
-    }
-
-    if (propertyId) {
-      where.propertyId = propertyId;
-    }
-
-    // If user is not admin, only show their properties' maintenance requests
-    if (userId) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { role: true },
-      });
-
-      if (user?.role !== 'ADMIN') {
-        where.property = {
-          ownerId: userId,
-        };
-      }
+    if (userId && userRole !== 'ADMIN' && userRole !== 'MANAGER') {
+      where.property = { ownerId: userId };
     }
 
     const [requests, total] = await Promise.all([
@@ -95,7 +77,7 @@ export class MaintenanceService {
     };
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, userId: string, userRole?: string) {
     const request = await this.prisma.maintenanceRequest.findUnique({
       where: { id },
       include: {
@@ -124,13 +106,7 @@ export class MaintenanceService {
       throw new NotFoundException('Maintenance request not found');
     }
 
-    // Check if user has access
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-
-    if (user?.role !== 'ADMIN' && request.property.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && request.property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to view this maintenance request');
     }
 
@@ -143,6 +119,7 @@ export class MaintenanceService {
   async create(
     createMaintenanceRequestDto: CreateMaintenanceRequestDto,
     userId: string,
+    userRole?: string,
   ) {
     // Verify property ownership
     const property = await this.prisma.property.findUnique({
@@ -153,12 +130,7 @@ export class MaintenanceService {
       throw new NotFoundException('Property not found');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-
-    if (user?.role !== 'ADMIN' && property.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to create maintenance request for this property');
     }
 
@@ -209,30 +181,18 @@ export class MaintenanceService {
     id: string,
     updateMaintenanceRequestDto: UpdateMaintenanceRequestDto,
     userId: string,
+    userRole?: string,
   ) {
     const request = await this.prisma.maintenanceRequest.findUnique({
       where: { id },
-      include: {
-        property: {
-          select: {
-            id: true,
-            ownerId: true,
-          },
-        },
-      },
+      include: { property: { select: { id: true, ownerId: true } } },
     });
 
     if (!request) {
       throw new NotFoundException('Maintenance request not found');
     }
 
-    // Check if user has access
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-
-    if (user?.role !== 'ADMIN' && request.property.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER' && request.property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to update this maintenance request');
     }
 
@@ -266,37 +226,22 @@ export class MaintenanceService {
     };
   }
 
-  async assign(id: string, assignedTo: string, userId: string) {
-    const request = await this.prisma.maintenanceRequest.findUnique({
-      where: { id },
-      include: {
-        property: {
-          select: {
-            id: true,
-            ownerId: true,
-          },
-        },
-      },
-    });
+  async assign(id: string, assignedTo: string, userId: string, userRole?: string) {
+    const [request, assignedUser] = await Promise.all([
+      this.prisma.maintenanceRequest.findUnique({
+        where: { id },
+        include: { property: { select: { id: true, ownerId: true } } },
+      }),
+      this.prisma.user.findUnique({ where: { id: assignedTo }, select: { id: true } }),
+    ]);
 
     if (!request) {
       throw new NotFoundException('Maintenance request not found');
     }
 
-    // Check if user has access
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-
-    if (user?.role !== 'ADMIN' && request.property.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER' && request.property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to assign this maintenance request');
     }
-
-    // Verify assigned user exists
-    const assignedUser = await this.prisma.user.findUnique({
-      where: { id: assignedTo },
-    });
 
     if (!assignedUser) {
       throw new NotFoundException('Assigned user not found');
@@ -335,30 +280,17 @@ export class MaintenanceService {
     };
   }
 
-  async complete(id: string, userId: string) {
+  async complete(id: string, userId: string, userRole?: string) {
     const request = await this.prisma.maintenanceRequest.findUnique({
       where: { id },
-      include: {
-        property: {
-          select: {
-            id: true,
-            ownerId: true,
-          },
-        },
-      },
+      include: { property: { select: { id: true, ownerId: true } } },
     });
 
     if (!request) {
       throw new NotFoundException('Maintenance request not found');
     }
 
-    // Check if user has access
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-
-    if (user?.role !== 'ADMIN' && request.property.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER' && request.property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to complete this maintenance request');
     }
 

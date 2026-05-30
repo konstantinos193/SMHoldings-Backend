@@ -35,13 +35,14 @@ async function seedAdminUser() {
 
     if (existingUser) {
       console.log(`✅ User ${email} already exists. Updating to admin role...`);
-      
-      // Update existing user to admin role
+
+      const hashedPassword = await hashPassword(password);
       const updatedUser = await prisma.user.update({
         where: { email },
         data: {
           role: 'ADMIN',
           isActive: true,
+          password: hashedPassword,
           name: existingUser.name || 'Konstantinos Blavakis',
           avatar: existingUser.avatar || 'https://ui-avatars.com/api/?name=Konstantinos+Blavakis&background=3b82f6&color=fff'
         }

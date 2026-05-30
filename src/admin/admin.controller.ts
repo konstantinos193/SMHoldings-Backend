@@ -11,7 +11,7 @@ import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -61,31 +61,19 @@ export class AdminController {
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
   ) {
-    return this.adminService.getFinancialReport(
-      new Date(startDate),
-      new Date(endDate),
-    );
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : new Date(end.getFullYear(), end.getMonth(), 1);
+    return this.adminService.getFinancialReport(start, end);
   }
 
   @Patch('users/:id/role')
-  updateUserRole(
-    @Param('id') id: string,
-    @Body('role') role: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.adminService.updateUserRole(
-      id,
-      role,
-      user.userId || user.id,
-    );
+  updateUserRole(@Param('id') id: string, @Body('role') role: string) {
+    return this.adminService.updateUserRole(id, role);
   }
 
   @Patch('users/:id/status')
-  toggleUserStatus(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-  ) {
-    return this.adminService.toggleUserStatus(id, user.userId || user.id);
+  toggleUserStatus(@Param('id') id: string) {
+    return this.adminService.toggleUserStatus(id);
   }
 }
 

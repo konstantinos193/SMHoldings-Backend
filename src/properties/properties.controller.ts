@@ -34,8 +34,8 @@ export class PropertiesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create property' })
   @ApiResponse({ status: 201 })
-  create(@Body() createPropertyDto: CreatePropertyDto, @CurrentUser() user: any) {
-    return this.propertiesService.create(createPropertyDto, user.userId);
+  create(@Body() createPropertyDto: CreatePropertyDto, @CurrentUser() userId: string) {
+    return this.propertiesService.create(createPropertyDto, userId);
   }
 
   @UseGuards(JwtAuthGuard)

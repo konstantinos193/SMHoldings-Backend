@@ -13,6 +13,7 @@ import { CreatePropertyGroupDto } from './dto/create-property-group.dto';
 import { UpdatePropertyGroupDto } from './dto/update-property-group.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 
@@ -31,8 +32,8 @@ export class PropertyGroupsController {
   }
 
   @Get()
-  findAll(@CurrentUser() userId: string) {
-    return this.propertyGroupsService.findAll(userId);
+  findAll(@CurrentUserWithRole() user: any) {
+    return this.propertyGroupsService.findAll(user?.userId ?? user?.id, user?.role);
   }
 
   @Get(':id')

@@ -1,19 +1,18 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { Controller, Get, Query, BadRequestException, NotFoundException } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Public } from '../common/decorators/public.decorator';
-import { BookingsService } from '../bookings/bookings.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { FinancialUtil } from '../common/utils/financial.util';
+import { computeNightlySubtotal } from '../common/utils/price.util';
 
 @ApiTags('Pricing')
 @Controller('pricing')
 export class PricingController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   @Get('calculate')
   @Public()
   @ApiOperation({ summary: 'Calculate total price for a booking' })
-  @ApiResponse({ status: 200 })
   async calculatePrice(
     @Query('propertyId') propertyId: string,
     @Query('roomId') roomId?: string,
@@ -22,11 +21,10 @@ export class PricingController {
     @Query('guests') guests?: number,
   ) {
     if (!propertyId || !checkIn || !checkOut || !guests) {
-      throw new Error('propertyId, checkIn, checkOut, and guests are required');
+      throw new BadRequestException('propertyId, checkIn, checkOut, and guests are required');
     }
 
-    // Use the same pricing logic as bookings service
-    const property = await this.bookingsService['prisma'].property.findUnique({
+    const property = await this.prisma.property.findUnique({
       where: { id: propertyId },
       select: {
         id: true,
@@ -39,7 +37,7 @@ export class PricingController {
     });
 
     if (!property) {
-      throw new Error('Property not found');
+      throw new NotFoundException('Property not found');
     }
 
     const checkInDate = new Date(checkIn);
@@ -48,9 +46,8 @@ export class PricingController {
 
     let effectivePricePerNight = property.basePrice;
 
-    // If roomId is provided, use room pricing
     if (roomId) {
-      const room = await this.bookingsService['prisma'].room.findUnique({
+      const room = await this.prisma.room.findUnique({
         where: { id: roomId },
         include: {
           availabilityRules: {
@@ -65,39 +62,19 @@ export class PricingController {
       });
 
       if (room) {
-        let subtotal = 0;
-        const current = new Date(checkInDate);
-        current.setHours(0, 0, 0, 0);
-        const end = new Date(checkOutDate);
-        end.setHours(0, 0, 0, 0);
-
-        while (current < end) {
-          const rule = room.availabilityRules.find(
-            (r) => new Date(r.startDate) <= current && new Date(r.endDate) > current,
-          );
-          subtotal += rule?.priceOverride ?? room.basePrice;
-          current.setDate(current.getDate() + 1);
-        }
-
-        effectivePricePerNight = nights > 0 ? subtotal / nights : room.basePrice;
+        const { subtotal, nights: n } = computeNightlySubtotal(room.basePrice, room.availabilityRules, checkInDate, checkOutDate);
+        effectivePricePerNight = n > 0 ? subtotal / n : room.basePrice;
       }
     }
 
-    // Calculate price breakdown using FinancialUtil (NO FEES)
     const priceBreakdown = FinancialUtil.calculateTotalPrice(
       effectivePricePerNight,
       nights,
       guests,
-      0, // No cleaning fee
-      0, // No service fee
-      0, // No tax
-      0, // discounts
+      0, 0, 0, 0,
       property.currency || 'EUR',
     );
 
-    return {
-      success: true,
-      data: priceBreakdown,
-    };
+    return { success: true, data: priceBreakdown };
   }
 }

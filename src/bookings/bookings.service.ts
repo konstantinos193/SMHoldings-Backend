@@ -7,16 +7,23 @@ import { BookingQueryDto } from './dto/booking-query.dto';
 import { RescheduleBookingDto } from './dto/reschedule-booking.dto';
 import { getPagination } from '../common/utils/pagination.util';
 import { FinancialUtil } from '../common/utils/financial.util';
+import { computeNightlySubtotal } from '../common/utils/price.util';
 import { PaymentStatus } from '../database/types';
 import { EmailService } from '../email/email.service';
 import Stripe from 'stripe';
 
 @Injectable()
 export class BookingsService {
+  private stripe: Stripe | null = null;
+
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
-  ) {}
+  ) {
+    if (process.env.STRIPE_SECRET_KEY) {
+      this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+    }
+  }
 
   async findAll(query: BookingQueryDto) {
     const { sortBy, sortOrder = 'desc', search, status, dateFrom, dateTo, propertyId, roomId } = query;
@@ -224,21 +231,8 @@ export class BookingsService {
       });
 
       if (room) {
-        let subtotal = 0;
-        const current = new Date(checkIn);
-        current.setHours(0, 0, 0, 0);
-        const end = new Date(checkOut);
-        end.setHours(0, 0, 0, 0);
-
-        while (current < end) {
-          const rule = room.availabilityRules.find(
-            (r) => new Date(r.startDate) <= current && new Date(r.endDate) > current,
-          );
-          subtotal += rule?.priceOverride ?? room.basePrice;
-          current.setDate(current.getDate() + 1);
-        }
-
-        effectivePricePerNight = nights > 0 ? subtotal / nights : room.basePrice;
+        const { subtotal, nights: n } = computeNightlySubtotal(room.basePrice, room.availabilityRules, checkIn, checkOut);
+        effectivePricePerNight = n > 0 ? subtotal / n : room.basePrice;
       }
     }
 
@@ -341,21 +335,8 @@ export class BookingsService {
       });
 
       if (room) {
-        let subtotal = 0;
-        const current = new Date(checkIn);
-        current.setHours(0, 0, 0, 0);
-        const end = new Date(checkOut);
-        end.setHours(0, 0, 0, 0);
-
-        while (current < end) {
-          const rule = room.availabilityRules.find(
-            (r) => new Date(r.startDate) <= current && new Date(r.endDate) > current,
-          );
-          subtotal += rule?.priceOverride ?? room.basePrice;
-          current.setDate(current.getDate() + 1);
-        }
-
-        effectivePricePerNight = nights > 0 ? subtotal / nights : room.basePrice;
+        const { subtotal, nights: n } = computeNightlySubtotal(room.basePrice, room.availabilityRules, checkIn, checkOut);
+        effectivePricePerNight = n > 0 ? subtotal / n : room.basePrice;
       }
     }
 
@@ -491,20 +472,19 @@ export class BookingsService {
     };
   }
 
-  async cancel(id: string, cancelBookingDto: CancelBookingDto, userId: string) {
+  async cancel(id: string, cancelBookingDto: CancelBookingDto, userId: string, userRole: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id },
-      include: { property: true },
+      include: { property: { select: { ownerId: true, cancellationPolicy: true, titleEn: true, titleGr: true } } },
     });
 
     if (!booking) {
       throw new NotFoundException('Booking not found');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isGuest = booking.guestId === userId;
     const isOwner = booking.property.ownerId === userId;
-    const isAdmin = user?.role === 'ADMIN';
+    const isAdmin = userRole === 'ADMIN';
 
     if (!isGuest && !isOwner && !isAdmin) {
       throw new BadRequestException('Unauthorized to cancel this booking');
@@ -535,10 +515,9 @@ export class BookingsService {
       refundAmount = (refundCalculation.refundPercentage / 100) * payment.amount;
 
       // Attempt Stripe refund (best-effort — test mode may not have a real charge)
-      if (payment.stripeChargeId && refundAmount > 0 && process.env.STRIPE_SECRET_KEY) {
+      if (payment.stripeChargeId && refundAmount > 0 && this.stripe) {
         try {
-          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-          await stripe.refunds.create({
+          await this.stripe.refunds.create({
             charge: payment.stripeChargeId,
             amount: Math.round(refundAmount * 100),
             reason: 'requested_by_customer',
@@ -605,19 +584,18 @@ export class BookingsService {
     };
   }
 
-  async markAsPaid(id: string, userId: string) {
+  async markAsPaid(id: string, userId: string, userRole?: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id },
-      include: { property: true },
+      include: { property: { select: { ownerId: true } } },
     });
 
     if (!booking) {
       throw new NotFoundException('Booking not found');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isOwner = booking.property.ownerId === userId;
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
 
     if (!isOwner && !isAdmin) {
       throw new BadRequestException('Unauthorized to mark this booking as paid');
@@ -655,46 +633,30 @@ export class BookingsService {
     };
   }
 
-  async remove(id: string, userId: string) {
-    const booking = await this.prisma.booking.findUnique({
-      where: { id },
-      include: { property: true },
-    });
+  async remove(id: string) {
+    const booking = await this.prisma.booking.findUnique({ where: { id } });
 
     if (!booking) {
       throw new NotFoundException('Booking not found');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN';
+    await this.prisma.booking.delete({ where: { id } });
 
-    if (!isAdmin) {
-      throw new BadRequestException('Only admins can delete bookings');
-    }
-
-    await this.prisma.booking.delete({
-      where: { id },
-    });
-
-    return {
-      success: true,
-      message: 'Booking deleted successfully',
-    };
+    return { success: true, message: 'Booking deleted successfully' };
   }
 
-  async reschedule(id: string, rescheduleDto: RescheduleBookingDto, userId: string): Promise<any> {
+  async reschedule(id: string, rescheduleDto: RescheduleBookingDto, userId: string, userRole: string): Promise<any> {
     const booking = await this.prisma.booking.findUnique({
       where: { id },
-      include: { property: true }
+      include: { property: { select: { ownerId: true, titleEn: true, titleGr: true } } },
     });
 
     if (!booking) {
       throw new NotFoundException('Booking not found');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isOwner = booking.property.ownerId === userId;
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
 
     if (!isOwner && !isAdmin) {
       throw new BadRequestException('Unauthorized to reschedule this booking');

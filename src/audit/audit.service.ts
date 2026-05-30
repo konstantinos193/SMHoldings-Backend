@@ -164,6 +164,7 @@ export class AuditService {
         },
       },
       orderBy: { createdAt: 'desc' },
+      take: 10000,
     });
 
     // Convert to CSV format

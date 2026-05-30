@@ -9,33 +9,49 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreatePricingRuleDto, UpdatePricingRuleDto } from './dto/create-pricing-rule.dto';
+import { UpdateRoomAvailabilityDto } from './dto/update-room-availability.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Public } from '../common/decorators/public.decorator';
 
+@ApiTags('rooms')
+@ApiBearerAuth()
 @Controller('rooms')
 @UseGuards(JwtAuthGuard)
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
-  @Get()
-  @Roles('ADMIN', 'MANAGER', 'PROPERTY_OWNER')
-  @ApiOperation({ summary: 'Get all rooms (authenticated)' })
-  findAllAuth() {
-    return this.roomsService.findAllPublic();
-  }
+  // ─── Public routes ────────────────────────────────────────────────────────
 
   @Public()
   @Get('public/all')
   findAllPublic() {
     return this.roomsService.findAllPublic();
+  }
+
+  @Public()
+  @Get('public/search')
+  findAvailablePublic(
+    @Query('checkIn') checkIn: string,
+    @Query('checkOut') checkOut: string,
+    @Query('guests') guests?: string,
+    @Query('adults') adults?: string,
+    @Query('children') children?: string,
+  ) {
+    return this.roomsService.findAvailablePublic(
+      checkIn,
+      checkOut,
+      guests ? Number(guests) : undefined,
+      adults !== undefined ? Number(adults) : undefined,
+      children !== undefined ? Number(children) : undefined,
+    );
   }
 
   @Public()
@@ -48,30 +64,9 @@ export class RoomsController {
   }
 
   @Public()
-  @Get('public/search')
-  findAvailablePublic(
-    @Query('checkIn') checkIn: string,
-    @Query('checkOut') checkOut: string,
-    @Query('guests') guests?: string,
-    @Query('adults') adults?: string,
-    @Query('children') children?: string,
-  ) {
-    const parsedGuests = guests ? Number(guests) : undefined;
-    const parsedAdults = adults !== undefined ? Number(adults) : undefined;
-    const parsedChildren = children !== undefined ? Number(children) : undefined;
-    return this.roomsService.findAvailablePublic(checkIn, checkOut, parsedGuests, parsedAdults, parsedChildren);
-  }
-
-  @Public()
   @Get('public/min-price')
   getMinPrice() {
     return this.roomsService.getMinPrice();
-  }
-
-  @Public()
-  @Get('public/:id')
-  findOnePublic(@Param('id') id: string) {
-    return this.roomsService.findOnePublic(id);
   }
 
   @Public()
@@ -86,11 +81,37 @@ export class RoomsController {
     return this.roomsService.findAllBookable();
   }
 
+  @Public()
+  @Get('public/:id')
+  findOnePublic(@Param('id') id: string) {
+    return this.roomsService.findOnePublic(id);
+  }
+
+  @Public()
+  @Get(':id/availability')
+  getAvailability(
+    @Param('id') id: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.roomsService.getRoomAvailability(id, new Date(startDate), new Date(endDate));
+  }
+
+  // ─── Authenticated routes ─────────────────────────────────────────────────
+
+  @Get()
+  @Roles('ADMIN', 'MANAGER', 'PROPERTY_OWNER')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Get all rooms (authenticated)' })
+  findAllAuth() {
+    return this.roomsService.findAllPublic();
+  }
+
   @Post()
   @Roles('PROPERTY_OWNER', 'ADMIN')
   @UseGuards(RolesGuard)
   create(@Body() createRoomDto: CreateRoomDto, @CurrentUserWithRole() user: any) {
-    return this.roomsService.create(createRoomDto, user.userId || user.id);
+    return this.roomsService.create(createRoomDto, this.getUserId(user));
   }
 
   @Get('property/:propertyId')
@@ -98,7 +119,7 @@ export class RoomsController {
     @Param('propertyId') propertyId: string,
     @CurrentUserWithRole() user?: any,
   ) {
-    return this.roomsService.findAll(propertyId, user?.userId || user?.id);
+    return this.roomsService.findAll(propertyId, this.getUserId(user));
   }
 
   @Patch(':id')
@@ -109,14 +130,14 @@ export class RoomsController {
     @Body() updateRoomDto: UpdateRoomDto,
     @CurrentUserWithRole() user: any,
   ) {
-    return this.roomsService.update(id, updateRoomDto, user.userId || user.id, user.role);
+    return this.roomsService.update(id, updateRoomDto, this.getUserId(user), user.role);
   }
 
   @Delete(':id')
   @Roles('PROPERTY_OWNER', 'ADMIN')
   @UseGuards(RolesGuard)
   remove(@Param('id') id: string, @CurrentUserWithRole() user: any) {
-    return this.roomsService.remove(id, user.userId || user.id, user.role);
+    return this.roomsService.remove(id, this.getUserId(user), user.role);
   }
 
   @Get(':id/pricing-rules')
@@ -151,20 +172,6 @@ export class RoomsController {
     return this.roomsService.deletePricingRule(id, ruleId);
   }
 
-  @Public()
-  @Get(':id/availability')
-  getAvailability(
-    @Param('id') id: string,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-  ) {
-    return this.roomsService.getRoomAvailability(
-      id,
-      new Date(startDate),
-      new Date(endDate),
-    );
-  }
-
   @Get(':id/availability-calendar')
   @Roles('PROPERTY_OWNER', 'ADMIN', 'MANAGER')
   @UseGuards(RolesGuard)
@@ -181,14 +188,19 @@ export class RoomsController {
   @UseGuards(RolesGuard)
   updateAvailability(
     @Param('id') id: string,
-    @Body() body: { isAvailable: boolean; startDate: string; endDate: string; reason?: string },
+    @Body() body: UpdateRoomAvailabilityDto,
   ) {
     return this.roomsService.updateAvailability(id, body);
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUserWithRole() user?: any) {
-    return this.roomsService.findOne(id, user?.userId || user?.id);
+    return this.roomsService.findOne(id, this.getUserId(user));
+  }
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
+
+  private getUserId(user?: any): string | undefined {
+    return user?.userId ?? user?.id;
   }
 }
-

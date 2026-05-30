@@ -14,12 +14,12 @@ export class CleaningService {
   async findAll(
     params: { page: number; limit: number; propertyId?: string; frequency?: string; search?: string },
     userId: string,
+    userRole?: string,
   ) {
     const { page, limit, propertyId, frequency, search } = params;
     const skip = (page - 1) * limit;
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
 
     const where: any = {};
     if (!isAdmin) where.ownerId = userId;
@@ -83,13 +83,11 @@ export class CleaningService {
     return { success: true, data: schedule };
   }
 
-  async updateSchedule(id: string, updateDto: Partial<CreateCleaningScheduleDto>, userId: string) {
+  async updateSchedule(id: string, updateDto: Partial<CreateCleaningScheduleDto>, userId: string, userRole?: string) {
     const schedule = await this.prisma.cleaningSchedule.findUnique({ where: { id } });
     if (!schedule) throw new NotFoundException('Cleaning schedule not found');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
-    if (!isAdmin && schedule.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER' && schedule.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to update cleaning schedule');
     }
 
@@ -109,13 +107,11 @@ export class CleaningService {
     return { success: true, data: updated };
   }
 
-  async removeSchedule(id: string, userId: string) {
+  async removeSchedule(id: string, userId: string, userRole?: string) {
     const schedule = await this.prisma.cleaningSchedule.findUnique({ where: { id } });
     if (!schedule) throw new NotFoundException('Cleaning schedule not found');
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
-    if (!isAdmin && schedule.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER' && schedule.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to delete cleaning schedule');
     }
 
@@ -123,31 +119,29 @@ export class CleaningService {
     return { success: true, message: 'Cleaning schedule deleted successfully' };
   }
 
-  async getStats(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  async getStats(userId: string, userRole?: string) {
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
     const where: any = isAdmin ? {} : { ownerId: userId };
+    const reviewWhere: any = {
+      cleanlinessRating: { not: null },
+      ...(isAdmin ? {} : { property: { ownerId: userId } }),
+    };
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const todayEnd = new Date(todayStart.getTime() + 86400000);
     const weekStart = new Date(todayStart.getTime() - 6 * 86400000);
 
-    const [totalSchedules, pendingToday, completedThisWeek, overdue, propertiesWithCleaning] = await Promise.all([
+    const [totalSchedules, pendingToday, completedThisWeek, overdue, propertiesWithCleaning, avgResult] = await Promise.all([
       this.prisma.cleaningSchedule.count({ where }),
       this.prisma.cleaningSchedule.count({ where: { ...where, nextCleaning: { gte: todayStart, lt: todayEnd } } }),
       this.prisma.cleaningSchedule.count({ where: { ...where, lastCleaned: { gte: weekStart, lt: todayEnd } } }),
       this.prisma.cleaningSchedule.count({ where: { ...where, nextCleaning: { lt: now } } }),
       this.prisma.cleaningSchedule.groupBy({ by: ['propertyId'], where }).then((r) => r.length),
+      this.prisma.review.aggregate({ _avg: { cleanlinessRating: true }, where: reviewWhere }),
     ]);
 
-    const reviews = await this.prisma.review.findMany({
-      where: { cleanlinessRating: { not: null }, ...(isAdmin ? {} : { property: { ownerId: userId } }) },
-      select: { cleanlinessRating: true },
-    });
-    const avgCleanliness = reviews.length > 0
-      ? reviews.reduce((s, r) => s + (r.cleanlinessRating || 0), 0) / reviews.length
-      : null;
+    const avg = avgResult._avg.cleanlinessRating;
 
     return {
       success: true,
@@ -156,7 +150,7 @@ export class CleaningService {
         pendingToday,
         completedThisWeek,
         overdue,
-        averageCleanlinessRating: avgCleanliness ? Math.round(avgCleanliness * 100) / 100 : null,
+        averageCleanlinessRating: avg ? Math.round(avg * 100) / 100 : null,
         propertiesWithCleaning,
       },
     };
@@ -165,6 +159,7 @@ export class CleaningService {
   async createSchedule(
     createScheduleDto: CreateCleaningScheduleDto,
     userId: string,
+    userRole?: string,
   ) {
     const property = await this.prisma.property.findUnique({
       where: { id: createScheduleDto.propertyId },
@@ -174,8 +169,7 @@ export class CleaningService {
       throw new NotFoundException('Property not found');
     }
 
-    const creator = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = creator?.role === 'ADMIN' || creator?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
     if (!isAdmin && property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to create cleaning schedule');
     }
@@ -207,6 +201,7 @@ export class CleaningService {
     scheduleId: string,
     cleanedDate: Date,
     userId: string,
+    userRole?: string,
   ) {
     const schedule = await this.prisma.cleaningSchedule.findUnique({
       where: { id: scheduleId },
@@ -216,30 +211,24 @@ export class CleaningService {
       throw new NotFoundException('Cleaning schedule not found');
     }
 
-    const updater = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdminUpdater = updater?.role === 'ADMIN' || updater?.role === 'MANAGER';
-    if (!isAdminUpdater && schedule.ownerId !== userId) {
+    if (userRole !== 'ADMIN' && userRole !== 'MANAGER' && schedule.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to update cleaning schedule');
     }
 
-    const nextCleaning = this.calculateNextCleaning(
-      schedule.frequency,
-      cleanedDate,
-    );
+    const nextCleaning = this.calculateNextCleaning(schedule.frequency, cleanedDate);
 
-    // Update property's last cleaning date
-    await this.prisma.property.update({
-      where: { id: schedule.propertyId },
-      data: { lastCleaningDate: cleanedDate },
-    });
+    const [, updated] = await Promise.all([
+      this.prisma.property.update({
+        where: { id: schedule.propertyId },
+        data: { lastCleaningDate: cleanedDate },
+      }),
+      this.prisma.cleaningSchedule.update({
+        where: { id: scheduleId },
+        data: { lastCleaned: cleanedDate, nextCleaning },
+      }),
+    ]);
 
-    return this.prisma.cleaningSchedule.update({
-      where: { id: scheduleId },
-      data: {
-        lastCleaned: cleanedDate,
-        nextCleaning,
-      },
-    });
+    return updated;
   }
 
   async getPropertyCleanliness(propertyId: string) {
@@ -287,7 +276,7 @@ export class CleaningService {
     };
   }
 
-  async getSchedulesByProperty(propertyId: string, userId: string) {
+  async getSchedulesByProperty(propertyId: string, userId: string, userRole?: string) {
     const property = await this.prisma.property.findUnique({
       where: { id: propertyId },
     });
@@ -296,9 +285,8 @@ export class CleaningService {
       throw new NotFoundException('Property not found');
     }
 
-    const viewer = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdminViewer = viewer?.role === 'ADMIN' || viewer?.role === 'MANAGER';
-    if (!isAdminViewer && property.ownerId !== userId) {
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
+    if (!isAdmin && property.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to view cleaning schedules');
     }
 

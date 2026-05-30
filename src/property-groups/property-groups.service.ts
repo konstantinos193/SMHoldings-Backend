@@ -23,13 +23,11 @@ export class PropertyGroupsService {
     });
   }
 
-  async findAll(userId: string, page = 1, limit = 20) {
+  async findAll(userId: string, userRole?: string, page = 1, limit = 20) {
     const pageNum = +page;
     const limitNum = +limit;
 
-    // Admins see all groups; owners see their own
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
     const where = isAdmin ? {} : { ownerId: userId };
 
     const [groups, total] = await Promise.all([

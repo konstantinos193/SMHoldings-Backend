@@ -14,6 +14,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 
 @Controller('reviews')
 export class ReviewsController {
@@ -42,12 +43,9 @@ export class ReviewsController {
   @UseGuards(JwtAuthGuard)
   create(
     @Body() createReviewDto: CreateReviewDto,
-    @CurrentUser() user: any,
+    @CurrentUser() userId: string,
   ) {
-    return this.reviewsService.create(
-      createReviewDto,
-      user.userId || user.id,
-    );
+    return this.reviewsService.create(createReviewDto, userId);
   }
 
   @Patch(':id')
@@ -55,19 +53,15 @@ export class ReviewsController {
   update(
     @Param('id') id: string,
     @Body() updateReviewDto: UpdateReviewDto,
-    @CurrentUser() user: any,
+    @CurrentUser() userId: string,
   ) {
-    return this.reviewsService.update(
-      id,
-      updateReviewDto,
-      user.userId || user.id,
-    );
+    return this.reviewsService.update(id, updateReviewDto, userId);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
-  remove(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.reviewsService.remove(id, user.userId || user.id);
+  remove(@Param('id') id: string, @CurrentUserWithRole() user: any) {
+    return this.reviewsService.remove(id, user?.userId ?? user?.id, user?.role);
   }
 }
 

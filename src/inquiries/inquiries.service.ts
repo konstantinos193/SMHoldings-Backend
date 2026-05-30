@@ -44,7 +44,7 @@ export class InquiriesService {
     priority?: string,
     assignedTo?: string,
     page = 1,
-    limit = 50,
+    limit = 10,
   ) {
     const where: any = {};
     if (status) where.status = status;

@@ -212,7 +212,7 @@ export class ReviewsService {
     return updatedReview;
   }
 
-  async remove(id: string, userId: string) {
+  async remove(id: string, userId: string, userRole?: string) {
     const review = await this.prisma.review.findUnique({
       where: { id },
       include: { property: true },
@@ -222,10 +222,8 @@ export class ReviewsService {
       throw new NotFoundException('Review not found');
     }
 
-    // Only guest or admin can delete
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const isGuest = review.guestId === userId;
-    const isAdmin = user?.role === 'ADMIN';
+    const isAdmin = userRole === 'ADMIN';
 
     if (!isGuest && !isAdmin) {
       throw new ForbiddenException('Unauthorized to delete this review');

@@ -39,8 +39,11 @@ coverage/
 # Generated reports
 reports/
 
-# Local dev scripts
+# Local dev scripts & Docker
 test-timings.js
+Dockerfile.local
+docker-compose.local.yml
+docker-entrypoint.local.sh
 
 # Build info
 *.tsbuildinfo
