@@ -7,7 +7,7 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm build
+RUN DATABASE_URL=file:./dummy.db pnpm build
 
 # ── Production image ──────────────────────────────────────────
 FROM node:20-alpine AS production
