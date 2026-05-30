@@ -39,6 +39,9 @@ coverage/
 # Generated reports
 reports/
 
+# Local dev scripts
+test-timings.js
+
 # Build info
 *.tsbuildinfo
 
