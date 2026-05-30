@@ -2,6 +2,7 @@ allowBuilds:
   '@nestjs/core': true
   '@prisma/engines': true
   '@scarf/scarf': true
+  '@swc/core': false
   esbuild: true
   prisma: true
   unrs-resolver: true

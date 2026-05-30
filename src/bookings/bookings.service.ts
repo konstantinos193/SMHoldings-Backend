@@ -180,6 +180,79 @@ export class BookingsService {
     };
   }
 
+  async calculateBookingPrice(dto: {
+    propertyId: string;
+    checkIn: string;
+    checkOut: string;
+    guests: number;
+    roomId?: string;
+  }): Promise<{ totalPrice: number; currency: string }> {
+    const property = await this.prisma.property.findUnique({
+      where: { id: dto.propertyId },
+      select: {
+        id: true,
+        status: true,
+        basePrice: true,
+        cleaningFee: true,
+        serviceFeePercentage: true,
+        taxRate: true,
+        currency: true,
+      },
+    });
+
+    if (!property) throw new NotFoundException('Property not found');
+    if (property.status !== 'ACTIVE') throw new BadRequestException('Property is not available for booking');
+
+    const checkIn = new Date(dto.checkIn);
+    const checkOut = new Date(dto.checkOut);
+    const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+
+    let effectivePricePerNight = property.basePrice;
+    if (dto.roomId) {
+      const room = await this.prisma.room.findUnique({
+        where: { id: dto.roomId },
+        include: {
+          availabilityRules: {
+            where: {
+              startDate: { lte: checkOut },
+              endDate: { gte: checkIn },
+              isAvailable: true,
+            },
+            orderBy: { startDate: 'asc' },
+          },
+        },
+      });
+
+      if (room) {
+        let subtotal = 0;
+        const current = new Date(checkIn);
+        current.setHours(0, 0, 0, 0);
+        const end = new Date(checkOut);
+        end.setHours(0, 0, 0, 0);
+
+        while (current < end) {
+          const rule = room.availabilityRules.find(
+            (r) => new Date(r.startDate) <= current && new Date(r.endDate) > current,
+          );
+          subtotal += rule?.priceOverride ?? room.basePrice;
+          current.setDate(current.getDate() + 1);
+        }
+
+        effectivePricePerNight = nights > 0 ? subtotal / nights : room.basePrice;
+      }
+    }
+
+    const priceBreakdown = FinancialUtil.calculateTotalPrice(
+      effectivePricePerNight,
+      nights,
+      dto.guests,
+      0, 0, 0, 0,
+      property.currency || 'EUR',
+    );
+
+    return { totalPrice: priceBreakdown.totalPrice, currency: priceBreakdown.currency };
+  }
+
   async createPublic(createBookingDto: CreateBookingDto) {
     // Create or find guest user
     let guest = await this.prisma.user.findFirst({

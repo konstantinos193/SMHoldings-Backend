@@ -34,8 +34,16 @@ export class InquiriesController {
     @Query('status') status?: string,
     @Query('priority') priority?: string,
     @Query('assignedTo') assignedTo?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.inquiriesService.findAll(status, priority, assignedTo);
+    return this.inquiriesService.findAll(
+      status,
+      priority,
+      assignedTo,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Get('stats')

@@ -141,6 +141,9 @@ model Property {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([ownerId])
+  @@index([status])
+  @@index([propertyGroupId])
   @@map("properties")
 }
 
@@ -256,6 +259,12 @@ model Booking {
   @@unique([source, externalId]) // Prevent duplicate imports from same platform
   @@index([source])
   @@index([externalId])
+  @@index([propertyId])
+  @@index([guestId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([checkIn])
+  @@index([createdAt])
   @@map("bookings")
 }
 
@@ -301,6 +310,7 @@ model PropertyAvailability {
   updatedAt DateTime @updatedAt
 
   @@unique([propertyId, date])
+  @@index([propertyId, available])
   @@map("property_availability")
 }
 
@@ -350,6 +360,9 @@ model MaintenanceRequest {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([propertyId])
+  @@index([status])
+  @@index([priority])
   @@map("maintenance_requests")
 }
 
@@ -381,6 +394,10 @@ model Message {
 
   createdAt DateTime @default(now())
 
+  @@index([bookingId])
+  @@index([senderId])
+  @@index([isRead])
+  @@index([createdAt])
   @@map("messages")
 }
 
@@ -405,6 +422,8 @@ model Notification {
 
   createdAt DateTime @default(now())
 
+  @@index([userId])
+  @@index([isRead])
   @@map("notifications")
 }
 
@@ -437,6 +456,8 @@ model Edition {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([category])
+  @@index([status])
   @@map("editions")
 }
 
@@ -513,6 +534,9 @@ model Payment {
   booking  Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
+  @@index([bookingId])
+  @@index([propertyId])
+  @@index([status])
   @@map("payments")
 }
 
@@ -559,6 +583,8 @@ model Room {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([propertyId])
+  @@index([isBookable])
   @@map("rooms")
 }
 
@@ -617,6 +643,8 @@ model CleaningSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([propertyId])
+  @@index([ownerId])
   @@map("cleaning_schedules")
 }
 
@@ -722,6 +750,7 @@ model AuditLog {
 
   @@index([userId])
   @@index([entityType, entityId])
+  @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
 }
@@ -889,6 +918,9 @@ model RoomAvailabilityRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([roomId])
+  @@index([startDate])
+  @@index([endDate])
   @@map("room_availability_rules")
 }
 
@@ -919,6 +951,11 @@ model Inquiry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([propertyId])
+  @@index([status])
+  @@index([priority])
+  @@index([assignedTo])
+  @@index([createdAt])
   @@map("inquiries")
 }
 

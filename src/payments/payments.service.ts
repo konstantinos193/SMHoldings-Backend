@@ -35,106 +35,69 @@ export class PaymentsService {
   }
 
   async createPublicCheckoutSession(
-    createPublicCheckoutSessionDto: CreatePublicCheckoutSessionDto,
-  ): Promise<{ checkoutUrl: string; sessionId: string; bookingId: string }> {
+    dto: CreatePublicCheckoutSessionDto,
+  ): Promise<{ checkoutUrl: string; sessionId: string }> {
     if (!process.env.STRIPE_SECRET_KEY) {
       throw new BadRequestException('Stripe is not configured');
     }
 
-    const bookingResponse = await this.bookingsService.createPublic({
-      propertyId: createPublicCheckoutSessionDto.propertyId,
-      checkIn: createPublicCheckoutSessionDto.checkIn,
-      checkOut: createPublicCheckoutSessionDto.checkOut,
-      guests: createPublicCheckoutSessionDto.guests,
-      guestName: createPublicCheckoutSessionDto.guestName,
-      guestEmail: createPublicCheckoutSessionDto.guestEmail,
-      guestPhone: createPublicCheckoutSessionDto.guestPhone,
-      specialRequests: createPublicCheckoutSessionDto.specialRequests,
-      roomId: createPublicCheckoutSessionDto.roomId,
-      roomName: createPublicCheckoutSessionDto.roomName,
-      paymentMethod: 'credit_card',
+    // Calculate price without creating a booking — booking is only created after payment succeeds
+    const { totalPrice, currency } = await this.bookingsService.calculateBookingPrice({
+      propertyId: dto.propertyId,
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      guests: dto.guests,
+      roomId: dto.roomId,
     });
 
-    const booking = bookingResponse?.data;
-    let rollbackBookingId: string | null = booking?.id || null;
-
-    if (!booking?.id) {
-      throw new BadRequestException('Unable to create booking');
-    }
-
-    try {
-      const session = await this.stripe.checkout.sessions.create({
-        mode: 'payment',
-        success_url: createPublicCheckoutSessionDto.successUrl,
-        cancel_url: createPublicCheckoutSessionDto.cancelUrl,
-        payment_method_types: ['card'],
-        client_reference_id: booking.id,
-        customer_email: booking.guestEmail,
-        line_items: [
-          {
-            quantity: 1,
-            price_data: {
-              currency: (booking.currency || 'EUR').toLowerCase(),
-              unit_amount: Math.round(booking.totalPrice * 100),
-              product_data: {
-                name:
-                  createPublicCheckoutSessionDto.roomName ||
-                  booking.property?.titleEn ||
-                  "L'Incanto Hotel",
-                description: `${createPublicCheckoutSessionDto.checkIn} to ${createPublicCheckoutSessionDto.checkOut} (${createPublicCheckoutSessionDto.guests} guests)`,
-              },
+    const session = await this.stripe.checkout.sessions.create({
+      mode: 'payment',
+      success_url: dto.successUrl,
+      cancel_url: dto.cancelUrl,
+      payment_method_types: ['card'],
+      customer_email: dto.guestEmail,
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: currency.toLowerCase(),
+            unit_amount: Math.round(totalPrice * 100),
+            product_data: {
+              name: dto.roomName || "L'Incanto Hotel",
+              description: `${dto.checkIn} to ${dto.checkOut} (${dto.guests} guests)`,
             },
           },
-        ],
+        },
+      ],
+      // Store all booking data in metadata so the webhook can create the booking after payment
+      metadata: {
+        propertyId: dto.propertyId,
+        checkIn: dto.checkIn,
+        checkOut: dto.checkOut,
+        guests: String(dto.guests),
+        guestName: dto.guestName,
+        guestEmail: dto.guestEmail,
+        guestPhone: dto.guestPhone || '',
+        specialRequests: (dto.specialRequests || '').slice(0, 490),
+        roomId: dto.roomId || '',
+        roomName: (dto.roomName || '').slice(0, 490),
+      },
+      payment_intent_data: {
         metadata: {
-          bookingId: booking.id,
-          propertyId: booking.propertyId,
-          roomId: createPublicCheckoutSessionDto.roomId,
-          guestEmail: booking.guestEmail,
+          propertyId: dto.propertyId,
+          guestEmail: dto.guestEmail,
+          roomId: dto.roomId || '',
         },
-        payment_intent_data: {
-          metadata: {
-            bookingId: booking.id,
-            propertyId: booking.propertyId,
-            roomId: createPublicCheckoutSessionDto.roomId,
-            guestEmail: booking.guestEmail,
-          },
-        },
-      });
-
-      if (!session.url) {
-        throw new BadRequestException('Stripe checkout URL was not generated');
-      }
-
-      await this.prisma.payment.create({
-        data: {
-          bookingId: booking.id,
-          propertyId: booking.propertyId,
-          amount: booking.totalPrice,
-          currency: booking.currency || 'EUR',
-          status: PaymentStatus.PENDING,
-          method: PaymentMethod.CREDIT_CARD,
-          transactionId: session.id,
-          stripePaymentIntentId:
-            typeof session.payment_intent === 'string' ? session.payment_intent : undefined,
-        },
-      });
-
-      return {
-        checkoutUrl: session.url,
-        sessionId: session.id,
-        bookingId: booking.id,
-      };
-    } catch (error) {
-      if (rollbackBookingId) {
-        await this.prisma.booking
-          .delete({
-            where: { id: rollbackBookingId },
-          })
-          .catch(() => undefined);
-      }
+      },
+    }).catch((error) => {
       throw new BadRequestException(`Checkout session creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    });
+
+    if (!session.url) {
+      throw new BadRequestException('Stripe checkout URL was not generated');
     }
+
+    return { checkoutUrl: session.url, sessionId: session.id };
   }
 
   async processPayment(
@@ -444,41 +407,56 @@ export class PaymentsService {
   }
 
   private async handleCheckoutSessionCompleted(session: StripeCheckoutSession): Promise<void> {
-    const bookingId = session.metadata?.bookingId || session.client_reference_id;
-
-    if (!bookingId) {
-      return;
-    }
-
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: {
-        property: {
-          select: {
-            serviceFeePercentage: true,
-          },
-        },
-      },
+    // Idempotency: if we already processed this session, skip
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: { transactionId: session.id },
     });
-
-    if (!booking) {
+    if (existingPayment?.status === PaymentStatus.COMPLETED) {
       return;
     }
 
     const paymentIntentId =
       typeof session.payment_intent === 'string' ? session.payment_intent : null;
 
-    let payment = await this.prisma.payment.findFirst({
-      where: {
-        OR: [
-          { transactionId: session.id },
-          { bookingId: booking.id },
-        ],
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    let booking: any;
+    let payment = existingPayment;
 
-    if (!payment) {
+    if (!existingPayment) {
+      // New flow: booking data lives in Stripe metadata, create booking now that payment succeeded
+      const meta = session.metadata || {};
+      const propertyId = meta.propertyId;
+      const guestEmail = meta.guestEmail;
+      const checkIn = meta.checkIn;
+      const checkOut = meta.checkOut;
+
+      if (!propertyId || !guestEmail || !checkIn || !checkOut) {
+        // Old-style session with bookingId in metadata (should not happen after this fix)
+        return;
+      }
+
+      let bookingResponse: any;
+      try {
+        bookingResponse = await this.bookingsService.createPublic({
+          propertyId,
+          checkIn,
+          checkOut,
+          guests: parseInt(meta.guests || '1', 10),
+          guestName: meta.guestName || guestEmail,
+          guestEmail,
+          guestPhone: meta.guestPhone || undefined,
+          specialRequests: meta.specialRequests || undefined,
+          roomId: meta.roomId || undefined,
+          roomName: meta.roomName || undefined,
+          paymentMethod: 'credit_card',
+        });
+      } catch (err) {
+        console.error('[Stripe webhook] Failed to create booking from session metadata:', err);
+        return;
+      }
+
+      booking = bookingResponse?.data;
+      if (!booking?.id) return;
+
       payment = await this.prisma.payment.create({
         data: {
           bookingId: booking.id,
@@ -491,14 +469,16 @@ export class PaymentsService {
           stripePaymentIntentId: paymentIntentId || undefined,
         },
       });
-    } else if (!payment.stripePaymentIntentId && paymentIntentId) {
-      payment = await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          stripePaymentIntentId: paymentIntentId,
-          transactionId: session.id,
-        },
-      });
+    } else {
+      booking = await this.prisma.booking.findUnique({ where: { id: existingPayment.bookingId } });
+      if (!booking) return;
+
+      if (!payment!.stripePaymentIntentId && paymentIntentId) {
+        payment = await this.prisma.payment.update({
+          where: { id: payment!.id },
+          data: { stripePaymentIntentId: paymentIntentId, transactionId: session.id },
+        });
+      }
     }
 
     if (paymentIntentId) {
@@ -512,20 +492,20 @@ export class PaymentsService {
       }
     }
 
-    if (payment.status === PaymentStatus.COMPLETED) {
+    if (payment!.status === PaymentStatus.COMPLETED) {
       return;
     }
 
-    const platformFee = 0; // No platform fee
-    const ownerRevenue = payment.amount - platformFee;
+    const platformFee = 0;
+    const ownerRevenue = payment!.amount - platformFee;
 
     await this.prisma.payment.update({
-      where: { id: payment.id },
+      where: { id: payment!.id },
       data: {
         status: PaymentStatus.COMPLETED,
         processedAt: new Date(),
         transactionId: session.id,
-        stripePaymentIntentId: paymentIntentId || payment.stripePaymentIntentId,
+        stripePaymentIntentId: paymentIntentId || payment!.stripePaymentIntentId,
       },
     });
 
@@ -545,31 +525,19 @@ export class PaymentsService {
       throw new BadRequestException('Stripe is not configured');
     }
 
-    // Find payment by transactionId (which stores the session ID)
-    const payment = await this.prisma.payment.findFirst({
-      where: { transactionId: sessionId },
-      include: { booking: true },
-    });
-
-    if (!payment) {
-      throw new NotFoundException('Payment not found for this session');
-    }
-
-    // If already completed, return early
-    if (payment.status === PaymentStatus.COMPLETED) {
-      return { status: 'COMPLETED', bookingId: payment.bookingId };
-    }
-
     try {
-      // Retrieve the checkout session from Stripe
       const session = await this.stripe.checkout.sessions.retrieve(sessionId);
 
       if (session.payment_status === 'paid') {
-        await this.handleCheckoutSessionCompleted(session);
-        return { status: 'COMPLETED', bookingId: payment.bookingId };
+        await this.handleCheckoutSessionCompleted(session as StripeCheckoutSession);
+
+        const payment = await this.prisma.payment.findFirst({
+          where: { transactionId: sessionId },
+        });
+        return { status: 'COMPLETED', bookingId: payment?.bookingId || null };
       }
 
-      return { status: payment.status, bookingId: payment.bookingId };
+      return { status: session.payment_status || 'PENDING', bookingId: null };
     } catch (error) {
       throw new BadRequestException(`Session confirmation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

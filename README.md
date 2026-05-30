@@ -9,12 +9,12 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-blue.svg" />
-  <img alt="Node" src="https://img.shields.io/badge/node-18%2B-green.svg" />
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.0-blue.svg" />
+  <img alt="Node" src="https://img.shields.io/badge/node-20%2B-green.svg" />
   <img alt="NestJS" src="https://img.shields.io/badge/NestJS-11-red.svg" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-blue.svg" />
-  <img alt="Prisma" src="https://img.shields.io/badge/Prisma-7.3-purple.svg" />
-  <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-7.1-darkgreen.svg" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6.0-blue.svg" />
+  <img alt="Prisma" src="https://img.shields.io/badge/Prisma-7.8-purple.svg" />
+  <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-7.2-darkgreen.svg" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-black.svg" />
 </p>
 
@@ -35,20 +35,20 @@ Because listing dependencies is the closest thing we have to a personality.
 | Layer | Technology | Version | Purpose |
 |---|---|---|---|
 | **Runtime** | Node.js | 18+ | Executing our regrets |
-| **Framework** | NestJS | 11.1.13 | Enterprise-grade decorators |
-| **Language** | TypeScript | 5.9.3 | Pretending JavaScript has types |
-| **ORM** | Prisma + LibSQL adapter | 7.3.0 | Making SQL feel like a distant memory |
+| **Framework** | NestJS | 11.1.24 | Enterprise-grade decorators |
+| **Language** | TypeScript | 6.0.3 | Pretending JavaScript has types |
+| **ORM** | Prisma + LibSQL adapter | 7.8.0 | Making SQL feel like a distant memory |
 | **Database** | Turso (LibSQL) | via adapter | Where the data goes to live, and occasionally die |
-| **Database** | MongoDB | 7.1.0 | The other database, because one was not enough |
-| **Auth** | Passport + JWT | 0.7.0 / 11.0.2 | Keeping the barbarians at the gate |
-| **Validation** | Zod + class-validator | 4.3.6 / 0.14.3 | Trust issues, formalized |
-| **Payments** | Stripe | 20.3.1 | Taking money from people, legally |
-| **Email** | Nodemailer | 8.0.1 | Sending emails into the void |
-| **File Storage** | Cloudinary | 2.9.0 | Where property photos go to be optimized beyond recognition |
-| **File Uploads** | Multer | 2.0.2 | Accepting files from strangers on the internet |
-| **API Docs** | Swagger | 11.2.6 | Documentation nobody reads |
-| **Security** | Helmet | 8.1.0 | A false sense of security |
-| **HTTP Client** | Axios | 1.13.5 | For when you need someone else's problems too |
+| **Database** | MongoDB | 7.2.0 | The other database, because one was not enough |
+| **Auth** | Passport + JWT | 0.7.0 / 11.0.5 | Keeping the barbarians at the gate |
+| **Validation** | Zod + class-validator | 4.4.3 / 0.15.1 | Trust issues, formalized |
+| **Payments** | Stripe | 22.2.0 | Taking money from people, legally |
+| **Email** | Nodemailer | 8.0.10 | Sending emails into the void |
+| **File Storage** | Cloudinary | 2.10.0 | Where property photos go to be optimized beyond recognition |
+| **File Uploads** | Multer | 2.1.1 | Accepting files from strangers on the internet |
+| **API Docs** | Swagger | 11.4.4 | Documentation nobody reads |
+| **Security** | Helmet | 8.2.0 | A false sense of security |
+| **HTTP Client** | Axios | 1.16.1 | For when you need someone else's problems too |
 | **Logging** | Morgan | 1.10.1 | Recording the exact moment things went wrong |
 | **Rate Limiting** | Throttler | 6.5.0 | Protecting the server from its own users |
 
@@ -76,7 +76,6 @@ Because listing dependencies is the closest thing we have to a personality.
 - **Audit Logging** -- Every action tracked with before/after changes, IP addresses, and user agents. Big Brother, but for property management.
 - **Settings** -- Key-value configuration store with typed values and groups. For when environment variables are not enough.
 - **Admin Panel** -- God mode. Dashboard stats, system-wide management.
-- **Upload** -- File upload handling with Cloudinary integration.
 
 ---
 
@@ -84,8 +83,8 @@ Because listing dependencies is the closest thing we have to a personality.
 
 ### Prerequisites
 
-- **Node.js 18+** -- If you are still on Node 14, this README cannot help you. Nobody can.
-- **yarn** or **npm** -- Pick one. Commit. Do not switch mid-project like a psychopath.
+- **Node.js 20+** -- If you are still on Node 18, it reached EOL in April 2025. If you are still on Node 14, this README cannot help you. Nobody can.
+- **pnpm** -- The package manager this project actually uses. `npm install` will work but you will live with the shame.
 - A **Turso** database (or compatible LibSQL) for the relational schema.
 - A **MongoDB** instance for document-based operations.
 - The will to live (optional but recommended).
@@ -99,7 +98,7 @@ cd stefanos-backend
 
 # Install dependencies. This will take a while.
 # Enough time to question your career choices.
-yarn install
+pnpm install
 
 # Copy the environment template.
 cp env.example .env
@@ -117,27 +116,27 @@ The application uses a dual-database architecture. Prisma with the LibSQL adapte
 npx prisma generate
 
 # Initialize the database schema
-yarn db:init
+pnpm db:init
 
 # Run migrations (if upgrading from a previous schema)
-yarn db:migrate
+pnpm db:migrate
 
 # Seed with sample data (optional, but recommended
 # unless you enjoy staring at empty tables)
-yarn db:seed
+pnpm db:seed
 ```
 
 ### Running the Server
 
 ```bash
 # Development (with hot reload, because life is short)
-yarn dev
+pnpm dev
 
 # Production (for the brave)
-yarn start:prod
+pnpm start:prod
 
 # Debug mode (for when printf debugging has failed you)
-yarn start:debug
+pnpm start:debug
 ```
 
 The API will be available at `http://localhost:3001` with the global prefix `/api`. Swagger docs live at `http://localhost:3001/docs`. If neither is responding, check if something else is already squatting on that port. It usually is.
@@ -150,22 +149,24 @@ All the commands you will forget exist and then rediscover six months later.
 
 | Command | What It Does |
 |---|---|
-| `yarn build` | Generates Prisma client, then compiles TypeScript. Prays nothing breaks. |
-| `yarn dev` | Development server with hot reload. Your most-used command. |
-| `yarn start` | Starts the server like a normal person. |
-| `yarn start:dev` | Same as `dev`. For the indecisive. |
-| `yarn start:prod` | Starts from compiled output. Production mode. No safety net. |
-| `yarn start:debug` | Attaches a debugger. For when `console.log` is not enough. |
-| `yarn format` | Prettier. Because tabs vs spaces wars are beneath us. |
-| `yarn lint` | ESLint. It will find problems you did not know you had. |
-| `yarn test` | Runs Jest. Results may vary. |
-| `yarn test:watch` | Runs tests on every save. Masochism, automated. |
-| `yarn test:cov` | Coverage report. A number to make management happy. |
-| `yarn test:debug` | Inspector-based debugging for tests. For the truly desperate. |
-| `yarn test:e2e` | End-to-end tests. The full horror show. |
-| `yarn db:init` | Initializes the database schema. |
-| `yarn db:seed` | Seeds the database with sample data via tsx. |
-| `yarn db:migrate` | Runs database migrations for schema changes. |
+| `pnpm build` | Generates Prisma client, then compiles TypeScript. Prays nothing breaks. |
+| `pnpm build:render` | Same as build, but named specifically for Render deployments. |
+| `pnpm dev` | Development server with hot reload. Your most-used command. |
+| `pnpm start` | Starts the server like a normal person. |
+| `pnpm start:prod` | Starts from compiled output. Production mode. No safety net. |
+| `pnpm start:debug` | Attaches a debugger. For when `console.log` is not enough. |
+| `pnpm format` | Prettier. Because tabs vs spaces wars are beneath us. |
+| `pnpm lint` | ESLint. It will find problems you did not know you had. |
+| `pnpm test` | Runs Jest. Results may vary. |
+| `pnpm test:watch` | Runs tests on every save. Masochism, automated. |
+| `pnpm test:cov` | Coverage report. A number to make management happy. |
+| `pnpm test:debug` | Inspector-based debugging for tests. For the truly desperate. |
+| `pnpm test:e2e` | End-to-end tests. The full horror show. |
+| `pnpm test:endpoints` | Runs the endpoint smoke tests via Node. Quick sanity check. |
+| `pnpm db:init` | Initializes the database schema. |
+| `pnpm db:seed` | Seeds the database with sample data via tsx. |
+| `pnpm db:seed:admin` | Seeds the admin user specifically. For when you locked yourself out. |
+| `pnpm db:migrate` | Runs database migrations for schema changes. |
 
 ---
 
@@ -231,29 +232,29 @@ scripts/
 
 ## Dependencies
 
-### Production (28 packages of varying trustworthiness)
+### Production (38 packages of varying trustworthiness)
 
 The full list lives in `package.json`. Here are the highlights, or lowlights, depending on your perspective:
 
-- **@nestjs/*** `^11.x` -- The framework. Eight packages deep. We are committed.
-- **@prisma/client** + **@prisma/adapter-libsql** `^7.3.0` -- ORM with Turso adapter. Because writing raw SQL builds character, but we are not here for character development.
-- **mongodb** `^7.1.0` -- The other database driver. For when one database is not enough to lose sleep over.
+- **@nestjs/*** `^11.x` -- The framework. Twelve packages deep across production and dev. We are committed.
+- **@prisma/client** + **@prisma/adapter-libsql** `^7.8.0` -- ORM with Turso adapter. Because writing raw SQL builds character, but we are not here for character development.
+- **mongodb** `^7.2.0` -- The other database driver. For when one database is not enough to lose sleep over.
 - **bcryptjs** `^3.0.3` -- Password hashing. The one thing we actually take seriously.
-- **stripe** `^20.3.1` -- Payment processing. Handle with care and a lawyer.
-- **zod** `^4.3.6` -- Schema validation. Trust nothing. Validate everything.
-- **multer** `^2.0.2` -- File uploads. What could possibly go wrong.
-- **cloudinary** `^2.9.0` -- Image management. Optimizing photos until they are unrecognizable.
-- **nodemailer** `^8.0.1` -- Email delivery. Into spam folders worldwide.
+- **stripe** `^22.2.0` -- Payment processing. Handle with care and a lawyer.
+- **zod** `^4.4.3` -- Schema validation. Trust nothing. Validate everything.
+- **multer** `^2.1.1` -- File uploads. What could possibly go wrong.
+- **cloudinary** `^2.10.0` -- Image management. Optimizing photos until they are unrecognizable.
+- **nodemailer** `^8.0.10` -- Email delivery. Into spam folders worldwide.
 
-### Development (22 packages that exist solely to yell at you)
+### Development (30 packages that exist solely to yell at you)
 
-- **typescript** `^5.9.3` -- The language. The myth. The compiler errors.
-- **jest** `^30.2.0` -- Testing framework. Your tests pass locally. They will not pass in CI.
-- **eslint** `^10.0.0` -- Linter. 847 rules, all of them angry.
-- **prettier** `^3.8.1` -- Code formatter. Ending arguments since 2017.
-- **prisma** `^7.3.0` -- CLI tools. For when you need to regenerate the client for the ninth time today.
+- **typescript** `^6.0.3` -- The language. The myth. The compiler errors.
+- **jest** `^30.4.2` -- Testing framework. Your tests pass locally. They will not pass in CI.
+- **eslint** `^10.4.1` -- Linter. 847 rules, all of them angry.
+- **prettier** `^3.8.3` -- Code formatter. Ending arguments since 2017.
+- **prisma** `^7.8.0` -- CLI tools. For when you need to regenerate the client for the ninth time today.
 - **supertest** `^7.2.2` -- HTTP testing. Simulating users so you do not have to.
-- **tsx** `^4.21.0` -- TypeScript execution. For running seed scripts without a build step.
+- **tsx** `^4.22.3` -- TypeScript execution. For running seed scripts without a build step.
 
 ---
 
@@ -278,8 +279,7 @@ Key variables include:
 | `CLOUDINARY_API_KEY` | Less catastrophic if leaked, but still embarrassing. |
 | `CLOUDINARY_API_SECRET` | The secret part of the not-so-secret image storage. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Email configuration. For sending password resets into spam folders worldwide. |
-| `AIRBNB_CLIENT_ID` / `AIRBNB_CLIENT_SECRET` | External booking integration. If needed. |
-| `REDIS_URL` | Caching. For when the database is not fast enough. |
+| `AIRBNB_CLIENT_ID` / `AIRBNB_CLIENT_SECRET` | External booking integration for the external bookings module. |
 
 ---
 
@@ -316,21 +316,22 @@ Key endpoint groups:
 
 ## Deployment
 
-Optimized for **Render** with a `render.yaml` blueprint, because Heroku decided free tiers were a phase.
+Deployed via **Docker on a VPS**, with GitHub Actions handling CI/CD. On every push to `main`:
 
-The blueprint defines a PostgreSQL database and a Node.js web service. The build command handles everything: install, Prisma generate, build, and migrate. The primary data layer uses **Turso (LibSQL)** via the Prisma adapter, with **MongoDB** as a secondary store for aggregations and stats.
+1. A Docker image is built and pushed to GitHub Container Registry (GHCR).
+2. The workflow SSHes into the VPS and runs `deploy.sh` to pull and swap the new image.
 
-1. Create a Web Service on Render (or use the blueprint).
-2. Connect the repository.
-3. Build command: `npm install --include=dev && npx prisma generate && npm run build && npx prisma migrate deploy`
-4. Start command: `npm run start:prod`
-5. Add all environment variables.
-6. Deploy.
-7. Wait.
-8. Refresh.
-9. Check logs.
-10. Fix the thing you forgot.
-11. Redeploy.
+**Required GitHub repository secrets:**
+
+| Secret | Description |
+|---|---|
+| `VPS_HOST` | Server IP or hostname |
+| `VPS_USER` | SSH user (e.g. `root`) |
+| `VPS_SSH_KEY` | Private SSH key for the server |
+
+All application environment variables are managed on the VPS directly (via Docker `--env-file` or equivalent), not in this repository.
+
+**Note:** `prisma migrate deploy` is not compatible with the LibSQL adapter — do not add it to the build or start command, no matter how tempting it looks.
 
 ---
 

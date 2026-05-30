@@ -73,6 +73,7 @@ export class MessagesService {
     const messages = await this.prisma.message.findMany({
       where: { bookingId },
       orderBy: { createdAt: 'asc' },
+      take: 200,
       include: {
         sender: {
           select: {
@@ -80,21 +81,6 @@ export class MessagesService {
             name: true,
             email: true,
             avatar: true,
-          },
-        },
-        booking: {
-          select: {
-            id: true,
-            propertyId: true,
-            guestName: true,
-            checkIn: true,
-            checkOut: true,
-            property: {
-              select: {
-                titleEn: true,
-                titleGr: true,
-              },
-            },
           },
         },
       },
@@ -149,22 +135,13 @@ export class MessagesService {
   async create(createMessageDto: CreateMessageDto) {
     const { bookingId, content, type = 'TEXT', senderId } = createMessageDto;
 
-    // Verify booking exists
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      select: { id: true },
     });
 
     if (!booking) {
       throw new NotFoundException('Booking not found');
-    }
-
-    // Verify sender exists
-    const sender = await this.prisma.user.findUnique({
-      where: { id: senderId },
-    });
-
-    if (!sender) {
-      throw new NotFoundException('Sender not found');
     }
 
     const message = await this.prisma.message.create({
@@ -208,14 +185,6 @@ export class MessagesService {
   }
 
   async markAsRead(id: string) {
-    const message = await this.prisma.message.findUnique({
-      where: { id },
-    });
-
-    if (!message) {
-      throw new NotFoundException('Message not found');
-    }
-
     const updatedMessage = await this.prisma.message.update({
       where: { id },
       data: { isRead: true },

@@ -140,28 +140,26 @@ export class LogsService {
   }
 
   async getActions() {
-    const logs = await this.prisma.auditLog.findMany({
-      select: { action: true },
-      distinct: ['action'],
+    const groups = await this.prisma.auditLog.groupBy({
+      by: ['action'],
       orderBy: { action: 'asc' },
     });
 
     return {
       success: true,
-      data: logs.map((l) => l.action),
+      data: groups.map((g) => g.action),
     };
   }
 
   async getEntityTypes() {
-    const logs = await this.prisma.auditLog.findMany({
-      select: { entityType: true },
-      distinct: ['entityType'],
+    const groups = await this.prisma.auditLog.groupBy({
+      by: ['entityType'],
       orderBy: { entityType: 'asc' },
     });
 
     return {
       success: true,
-      data: logs.map((l) => l.entityType),
+      data: groups.map((g) => g.entityType),
     };
   }
 

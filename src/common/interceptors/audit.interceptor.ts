@@ -18,8 +18,8 @@ export class AuditInterceptor implements NestInterceptor {
     const { method, url, user } = request;
     const userId = user?.id || user?.userId;
 
-    // Only log for authenticated users
-    if (!userId) {
+    // Only log authenticated mutations — skip GET reads entirely to keep audit_logs lean
+    if (!userId || method === 'GET') {
       return next.handle();
     }
 

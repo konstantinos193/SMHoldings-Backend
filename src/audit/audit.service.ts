@@ -268,37 +268,24 @@ export class AuditService {
   private async getTopUsers(): Promise<Array<{ user: { name: string; email: string }; count: number }>> {
     const result = await this.prisma.auditLog.groupBy({
       by: ['userId'],
-      _count: {
-        userId: true,
-      },
-      orderBy: {
-        _count: {
-          userId: 'desc',
-        },
-      },
+      _count: { userId: true },
+      orderBy: { _count: { userId: 'desc' } },
       take: 10,
     });
 
-    const users = await this.prisma.user.findMany({
-      where: {
-        id: {
-          in: result.map((item) => item.userId),
-        },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
+    if (result.length === 0) return [];
+
+    const userMap = await this.prisma.user
+      .findMany({
+        where: { id: { in: result.map((r) => r.userId) } },
+        select: { id: true, name: true, email: true },
+      })
+      .then((users) => new Map(users.map((u) => [u.id, u])));
 
     return result.map((item) => {
-      const user = users.find((u) => u.id === item.userId);
+      const user = userMap.get(item.userId);
       return {
-        user: {
-          name: user?.name || 'Unknown',
-          email: user?.email || 'Unknown',
-        },
+        user: { name: user?.name || 'Unknown', email: user?.email || 'Unknown' },
         count: item._count.userId,
       };
     });

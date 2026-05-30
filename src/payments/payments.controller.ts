@@ -44,7 +44,7 @@ export class PaymentsController {
   @HttpCode(HttpStatus.CREATED)
   async createPublicCheckoutSession(
     @Body() createPublicCheckoutSessionDto: CreatePublicCheckoutSessionDto,
-  ): Promise<{ checkoutUrl: string; sessionId: string; bookingId: string }> {
+  ): Promise<{ checkoutUrl: string; sessionId: string }> {
     return this.paymentsService.createPublicCheckoutSession(createPublicCheckoutSessionDto);
   }
 

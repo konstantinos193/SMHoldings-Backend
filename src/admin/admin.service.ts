@@ -282,64 +282,52 @@ export class AdminService {
   }
 
   async getFinancialReport(startDate: Date, endDate: Date) {
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        createdAt: {
-          gte: startDate,
-          lte: endDate,
-        },
-        paymentStatus: 'COMPLETED',
-      },
-      include: {
-        property: {
-          select: {
-            id: true,
-            titleEn: true,
-            owner: {
-              select: {
-                id: true,
-                name: true,
-              },
+    const where = {
+      createdAt: { gte: startDate, lte: endDate },
+      paymentStatus: 'COMPLETED' as const,
+    };
+
+    const [summary, bookings] = await Promise.all([
+      this.prisma.booking.aggregate({
+        where,
+        _sum: { totalPrice: true, platformFee: true, ownerRevenue: true },
+        _count: { id: true },
+      }),
+      this.prisma.booking.findMany({
+        where,
+        select: {
+          id: true,
+          totalPrice: true,
+          platformFee: true,
+          ownerRevenue: true,
+          createdAt: true,
+          property: {
+            select: {
+              titleEn: true,
+              owner: { select: { name: true } },
             },
           },
         },
-      },
-    });
-
-    const totalRevenue = bookings.reduce(
-      (sum, booking) => sum + booking.totalPrice,
-      0,
-    );
-
-    const totalPlatformFees = bookings.reduce(
-      (sum, booking) => sum + (booking.platformFee || 0),
-      0,
-    );
-
-    const totalOwnerRevenue = bookings.reduce(
-      (sum, booking) => sum + (booking.ownerRevenue || 0),
-      0,
-    );
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
     return {
-      period: {
-        startDate,
-        endDate,
-      },
+      period: { startDate, endDate },
       summary: {
-        totalBookings: bookings.length,
-        totalRevenue,
-        totalPlatformFees,
-        totalOwnerRevenue,
+        totalBookings: summary._count.id,
+        totalRevenue: summary._sum.totalPrice || 0,
+        totalPlatformFees: summary._sum.platformFee || 0,
+        totalOwnerRevenue: summary._sum.ownerRevenue || 0,
       },
-      bookings: bookings.map((booking) => ({
-        id: booking.id,
-        property: booking.property.titleEn,
-        owner: booking.property.owner.name,
-        totalPrice: booking.totalPrice,
-        platformFee: booking.platformFee,
-        ownerRevenue: booking.ownerRevenue,
-        createdAt: booking.createdAt,
+      bookings: bookings.map((b) => ({
+        id: b.id,
+        property: b.property.titleEn,
+        owner: b.property.owner.name,
+        totalPrice: b.totalPrice,
+        platformFee: b.platformFee,
+        ownerRevenue: b.ownerRevenue,
+        createdAt: b.createdAt,
       })),
     };
   }

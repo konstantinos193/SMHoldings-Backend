@@ -83,7 +83,10 @@ export class AnalyticsService {
   }
 
   private async isAdmin(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
     return user?.role === 'ADMIN' || user?.role === 'MANAGER';
   }
 
@@ -111,9 +114,17 @@ export class AnalyticsService {
       return where;
     };
 
-    const [currentBookings, prevBookings, activeUsers, prevUsers] = await Promise.all([
-      this.prisma.booking.findMany({ where: buildWhere(startDate, endDate), select: { ownerRevenue: true } }),
-      this.prisma.booking.findMany({ where: buildWhere(prevStart, prevEnd), select: { ownerRevenue: true } }),
+    const [currentAgg, prevAgg, activeUsers, prevUsers] = await Promise.all([
+      this.prisma.booking.aggregate({
+        where: buildWhere(startDate, endDate),
+        _sum: { ownerRevenue: true },
+        _count: { id: true },
+      }),
+      this.prisma.booking.aggregate({
+        where: buildWhere(prevStart, prevEnd),
+        _sum: { ownerRevenue: true },
+        _count: { id: true },
+      }),
       admin
         ? this.prisma.user.count({ where: { isActive: true, role: { not: 'ADMIN' as any } } })
         : Promise.resolve(0),
@@ -122,8 +133,10 @@ export class AnalyticsService {
         : Promise.resolve(0),
     ]);
 
-    const revenue = currentBookings.reduce((s, b) => s + (b.ownerRevenue || 0), 0);
-    const prevRevenue = prevBookings.reduce((s, b) => s + (b.ownerRevenue || 0), 0);
+    const revenue = currentAgg._sum.ownerRevenue || 0;
+    const prevRevenue = prevAgg._sum.ownerRevenue || 0;
+    const bookings = currentAgg._count.id;
+    const prevBookings = prevAgg._count.id;
 
     return {
       success: true,
@@ -131,11 +144,11 @@ export class AnalyticsService {
         pageViews: 0,
         activeUsers,
         revenue,
-        bookings: currentBookings.length,
+        bookings,
         pageViewsChange: 0,
         activeUsersChange: this.pctChange(activeUsers, prevUsers),
         revenueChange: this.pctChange(revenue, prevRevenue),
-        bookingsChange: this.pctChange(currentBookings.length, prevBookings.length),
+        bookingsChange: this.pctChange(bookings, prevBookings),
       },
     };
   }
@@ -232,21 +245,28 @@ export class AnalyticsService {
     const admin = await this.isAdmin(userId);
     if (!admin) return { success: true, data: [] };
 
-    const [total, guests, owners, managers, admins] = await Promise.all([
-      this.prisma.user.count(),
-      this.prisma.user.count({ where: { role: 'USER' as any } }),
-      this.prisma.user.count({ where: { role: 'PROPERTY_OWNER' as any } }),
-      this.prisma.user.count({ where: { role: 'MANAGER' as any } }),
-      this.prisma.user.count({ where: { role: 'ADMIN' as any } }),
-    ]);
+    const grouped = await this.prisma.user.groupBy({
+      by: ['role'],
+      _count: { role: true },
+    });
 
+    const roleLabels: Record<string, string> = {
+      USER: 'Guests',
+      PROPERTY_OWNER: 'Property Owners',
+      MANAGER: 'Managers',
+      ADMIN: 'Admins',
+    };
+
+    const total = grouped.reduce((s, g) => s + g._count.role, 0);
     const safe = total || 1;
-    const categories = [
-      { category: 'Guests', count: guests, percentage: Math.round((guests / safe) * 100) },
-      { category: 'Property Owners', count: owners, percentage: Math.round((owners / safe) * 100) },
-      { category: 'Managers', count: managers, percentage: Math.round((managers / safe) * 100) },
-      { category: 'Admins', count: admins, percentage: Math.round((admins / safe) * 100) },
-    ].filter((c) => c.count > 0);
+
+    const categories = grouped
+      .filter((g) => g._count.role > 0)
+      .map((g) => ({
+        category: roleLabels[g.role] ?? g.role,
+        count: g._count.role,
+        percentage: Math.round((g._count.role / safe) * 100),
+      }));
 
     return { success: true, data: categories };
   }
@@ -407,40 +427,41 @@ export class AnalyticsService {
   // ─── Financial analytics (existing) ──────────────────────────────────────────
 
   async getFinancialAnalytics(userId: string, period: AnalyticsPeriod) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const properties = await this.prisma.property.findMany({
-      where: { ownerId: userId },
-      include: {
-        bookings: {
-          where: { status: { in: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] } },
+    const [summary, properties] = await Promise.all([
+      this.prisma.booking.aggregate({
+        where: {
+          property: { ownerId: userId },
+          status: { in: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] },
         },
-        payments: { where: { status: 'COMPLETED' } },
-      },
-    });
-
-    const totalRevenue = properties.reduce(
-      (sum, prop) =>
-        sum + prop.bookings.reduce((s, b) => s + (b.ownerRevenue || 0), 0),
-      0,
-    );
-
-    const totalPlatformFees = properties.reduce(
-      (sum, prop) =>
-        sum + prop.bookings.reduce((s, b) => s + (b.platformFee || 0), 0),
-      0,
-    );
-
-    const totalBookings = properties.reduce((sum, prop) => sum + prop.bookings.length, 0);
+        _sum: { ownerRevenue: true, platformFee: true },
+        _count: { id: true },
+      }),
+      this.prisma.property.findMany({
+        where: { ownerId: userId },
+        select: {
+          id: true,
+          titleEn: true,
+          bookings: {
+            where: { status: { in: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] } },
+            select: { ownerRevenue: true, platformFee: true },
+          },
+        },
+      }),
+    ]);
 
     return {
-      totalRevenue,
-      totalPlatformFees,
-      totalBookings,
+      totalRevenue: summary._sum.ownerRevenue || 0,
+      totalPlatformFees: summary._sum.platformFee || 0,
+      totalBookings: summary._count.id,
       properties: properties.map((prop) => ({
         id: prop.id,
         title: prop.titleEn,
