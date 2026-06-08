@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateBookingDto } from './dto/create-booking.dto';
+import { CreateBookingDto, BookingStatus } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { BookingQueryDto } from './dto/booking-query.dto';
@@ -77,34 +77,46 @@ export class BookingsService {
       ];
     }
 
+    // Add timeout to prevent hanging on remote DB queries
+    const queryTimeout = 8000; // 8 seconds
     const [bookings, total] = await Promise.all([
-      this.prisma.booking.findMany({
-        where,
-        include: {
-          property: {
-            select: {
-              id: true,
-              titleGr: true,
-              titleEn: true,
-              images: true,
-              address: true,
-              city: true,
+      Promise.race([
+        this.prisma.booking.findMany({
+          where,
+          include: {
+            property: {
+              select: {
+                id: true,
+                titleGr: true,
+                titleEn: true,
+                images: true,
+                address: true,
+                city: true,
+              },
+            },
+            guest: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+              },
             },
           },
-          guest: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
-        },
-        orderBy,
-        skip,
-        take: limit,
-      }),
-      this.prisma.booking.count({ where }),
+          orderBy,
+          skip,
+          take: limit,
+        }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), queryTimeout)
+        ),
+      ]),
+      Promise.race([
+        this.prisma.booking.count({ where }),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('Count query timeout')), queryTimeout)
+        ),
+      ]),
     ]);
 
     const pagination = getPagination(page, limit, total);
@@ -265,10 +277,15 @@ export class BookingsService {
       });
     }
 
-    return this.create(createBookingDto, guest.id);
+    // Public/online bookings stay PENDING until payment is confirmed
+    return this.create(createBookingDto, guest.id, BookingStatus.PENDING);
   }
 
-  async create(createBookingDto: CreateBookingDto, guestId: string) {
+  async create(
+    createBookingDto: CreateBookingDto,
+    guestId: string,
+    status: BookingStatus = BookingStatus.CONFIRMED,
+  ) {
     const property = await this.prisma.property.findUnique({
       where: { id: createBookingDto.propertyId },
       select: {
@@ -365,7 +382,7 @@ export class BookingsService {
         checkIn,
         checkOut,
         guests: createBookingDto.guests,
-        status: 'CONFIRMED',
+        status,
         totalPrice: priceBreakdown.totalPrice,
         basePrice: priceBreakdown.subtotal,
         cleaningFee: priceBreakdown.cleaningFee,
