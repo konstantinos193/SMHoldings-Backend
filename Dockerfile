@@ -21,6 +21,7 @@ COPY --from=builder /app/dist ./dist
 # Prisma generates client to prisma/generated/prisma/ — compiled imports
 # resolve to dist/prisma/generated/prisma/ so copy it there
 COPY --from=builder /app/prisma/generated ./dist/prisma/generated
+COPY --from=builder /app/public ./public
 COPY package.json ./
 
 EXPOSE 3001

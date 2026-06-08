@@ -365,6 +365,7 @@ export class BookingsService {
         checkIn,
         checkOut,
         guests: createBookingDto.guests,
+        status: 'CONFIRMED',
         totalPrice: priceBreakdown.totalPrice,
         basePrice: priceBreakdown.subtotal,
         cleaningFee: priceBreakdown.cleaningFee,
@@ -420,9 +421,20 @@ export class BookingsService {
       throw new NotFoundException('Booking not found');
     }
 
+    // Recalculate owner revenue / platform fee when the agreed total price changes
+    const updateData: any = { ...updateBookingDto };
+    if (updateBookingDto.totalPrice !== undefined) {
+      const { ownerRevenue, platformFee } = FinancialUtil.calculateOwnerRevenue(
+        updateBookingDto.totalPrice,
+        0,
+      );
+      updateData.ownerRevenue = ownerRevenue;
+      updateData.platformFee = platformFee;
+    }
+
     const booking = await this.prisma.booking.update({
       where: { id },
-      data: updateBookingDto,
+      data: updateData,
       include: {
         property: {
           select: {
