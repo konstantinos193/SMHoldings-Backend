@@ -53,4 +53,8 @@ jobs:
             IMAGE=$(echo "ghcr.io/${{ github.repository }}:${{ github.sha }}" | tr '[:upper:]' '[:lower:]')
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
               -u "${{ github.actor }}" --password-stdin
+            
+            # Ensure DATABASE_URL uses local libsql container to prevent timeouts
+            sed -i 's|libsql://.*.turso.io.*|libsql://172.17.0.2:8080?tls=0|' /root/stefanos-backend/.env
+            
             /root/deploy.sh "$IMAGE"

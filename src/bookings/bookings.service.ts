@@ -78,46 +78,58 @@ export class BookingsService {
     }
 
     // Add timeout to prevent hanging on remote DB queries
-    const queryTimeout = 8000; // 8 seconds
-    const [bookings, total] = await Promise.all([
-      Promise.race([
-        this.prisma.booking.findMany({
-          where,
-          include: {
-            property: {
-              select: {
-                id: true,
-                titleGr: true,
-                titleEn: true,
-                images: true,
-                address: true,
-                city: true,
+    const queryTimeout = 15000; // 15 seconds for remote Turso DB
+    let bookings, total;
+    
+    try {
+      [bookings, total] = await Promise.all([
+        Promise.race([
+          this.prisma.booking.findMany({
+            where,
+            include: {
+              property: {
+                select: {
+                  id: true,
+                  titleGr: true,
+                  titleEn: true,
+                  images: true,
+                  address: true,
+                  city: true,
+                },
+              },
+              guest: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                },
               },
             },
-            guest: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-              },
-            },
-          },
-          orderBy,
-          skip,
-          take: limit,
-        }),
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Query timeout')), queryTimeout)
-        ),
-      ]),
-      Promise.race([
-        this.prisma.booking.count({ where }),
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Count query timeout')), queryTimeout)
-        ),
-      ]),
-    ]);
+            orderBy,
+            skip,
+            take: limit,
+          }),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database query timeout')), queryTimeout)
+          ),
+        ]),
+        Promise.race([
+          this.prisma.booking.count({ where }),
+          new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('Database count timeout')), queryTimeout)
+          ),
+        ]),
+      ]);
+    } catch (error: any) {
+      // If timeout occurs, return empty results instead of crashing
+      if (error.message.includes('timeout')) {
+        bookings = [];
+        total = 0;
+      } else {
+        throw error;
+      }
+    }
 
     const pagination = getPagination(page, limit, total);
 
