@@ -38,7 +38,7 @@ async function bootstrap() {
     : [];
   
   // Always include localhost:3000 and localhost:3002 for development
-  const defaultOrigins = ['http://localhost:3000', 'http://localhost:3002', 'http://localhost:57814', 'https://smholdings.gr', 'https://licanto.smholdings.gr', 'https://licanto.vercel.app', 'https://stefanos-admin.vercel.app'];
+  const defaultOrigins = ['http://localhost:3000', 'http://localhost:3002', 'http://localhost:57814', 'https://smholdings.gr', 'https://lincanto.gr', 'https://licanto.vercel.app', 'https://stefanos-admin.vercel.app'];
   const adminUrl = process.env.ADMIN_URL || 'http://localhost:3002';
   const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins, adminUrl])];
   
