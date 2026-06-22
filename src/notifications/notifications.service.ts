@@ -1,45 +1,70 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
   constructor(private prisma: PrismaService) {}
 
   async findAll(userId: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
 
-    const [notifications, total, unreadCount] = await Promise.all([
-      this.prisma.notification.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.notification.count({ where: { userId } }),
-      this.prisma.notification.count({ where: { userId, isRead: false } }),
-    ]);
+    this.logger.log(`Fetching notifications for user ${userId}, page ${page}, limit ${limit}`);
+    const startTime = Date.now();
 
-    return {
-      success: true,
-      data: {
-        notifications,
-        unreadCount,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
+    try {
+      const [notifications, total, unreadCount] = await Promise.all([
+        this.prisma.notification.findMany({
+          where: { userId },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        this.prisma.notification.count({ where: { userId } }),
+        this.prisma.notification.count({ where: { userId, isRead: false } }),
+      ]);
+
+      const duration = Date.now() - startTime;
+      this.logger.log(`Notifications fetched successfully in ${duration}ms`);
+
+      return {
+        success: true,
+        data: {
+          notifications,
+          unreadCount,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+          },
         },
-      },
-    };
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`Failed to fetch notifications after ${duration}ms`, error);
+      throw error;
+    }
   }
 
   async getUnreadCount(userId: string) {
-    const count = await this.prisma.notification.count({
-      where: { userId, isRead: false },
-    });
+    this.logger.log(`Fetching unread count for user ${userId}`);
+    const startTime = Date.now();
 
-    return { success: true, data: { unreadCount: count } };
+    try {
+      const count = await this.prisma.notification.count({
+        where: { userId, isRead: false },
+      });
+
+      const duration = Date.now() - startTime;
+      this.logger.log(`Unread count fetched successfully in ${duration}ms: ${count}`);
+
+      return { success: true, data: { unreadCount: count } };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      this.logger.error(`Failed to fetch unread count after ${duration}ms`, error);
+      throw error;
+    }
   }
 
   async markAsRead(id: string, userId: string) {
