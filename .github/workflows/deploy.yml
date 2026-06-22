@@ -54,7 +54,14 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
               -u "${{ github.actor }}" --password-stdin
             
-            # Ensure DATABASE_URL uses local libsql container to prevent timeouts
-            sed -i 's|libsql://.*.turso.io.*|libsql://172.17.0.2:8080?tls=0|' /root/stefanos-backend/.env
-            
+            # Ensure Docker network exists and connect libsql container
+            docker network inspect stefanos-net >/dev/null 2>&1 || docker network create stefanos-net
+            docker network connect stefanos-net libsql 2>/dev/null || true
+
+            # Update DATABASE_URL to use libsql container name on the network
+            sed -i 's|^DATABASE_URL=.*|DATABASE_URL=http://libsql:8080|' /root/stefanos.env
+
             /root/deploy.sh "$IMAGE"
+
+            # Health check using HTTP to ensure NestJS is fully booted
+            curl -fsS https://api.smholdings.gr/api/health/stats

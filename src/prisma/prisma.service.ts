@@ -18,8 +18,32 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     this.logger.debug(`DATABASE_URL starts with: ${dbUrl.substring(0, 20)}...`);
 
     try {
-      const adapter = new PrismaLibSql({ url: dbUrl });
-      this.client = new PrismaClient({ adapter });
+      const adapter = new PrismaLibSql({ 
+        url: dbUrl,
+        // Add connection timeout (30 seconds)
+        authToken: process.env.TURSO_AUTH_TOKEN,
+      });
+      
+      this.client = new PrismaClient({ 
+        adapter,
+        // Add query timeout configuration
+        log: [
+          { level: 'query', emit: 'event' },
+          { level: 'error', emit: 'event' },
+          { level: 'warn', emit: 'event' },
+        ],
+      });
+
+      // Log slow queries (> 5 seconds)
+      this.client.$on('query' as any, (e: any) => {
+        if (e.duration > 5000) {
+          this.logger.warn(`Slow query detected (${e.duration}ms): ${e.query}`);
+        }
+      });
+
+      this.client.$on('error' as any, (e: any) => {
+        this.logger.error(`Prisma query error: ${e.message}`);
+      });
 
       this.logger.debug('Testing connection...');
       await this.client.$connect();

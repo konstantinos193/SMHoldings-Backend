@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookingDto, BookingStatus } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
@@ -14,6 +14,7 @@ import Stripe from 'stripe';
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
   private stripe: Stripe | null = null;
 
   constructor(
@@ -30,6 +31,9 @@ export class BookingsService {
     const page = +(query.page || 1);
     const limit = +(query.limit || 10);
     const skip = (page - 1) * limit;
+
+    this.logger.log(`Fetching bookings - page: ${page}, limit: ${limit}, status: ${status || 'all'}`);
+    const startTime = Date.now();
 
     const orderBy: any = {};
     if (sortBy) {
@@ -121,12 +125,18 @@ export class BookingsService {
           ),
         ]),
       ]);
+      
+      const duration = Date.now() - startTime;
+      this.logger.log(`Bookings fetched successfully in ${duration}ms - count: ${total}`);
     } catch (error: any) {
+      const duration = Date.now() - startTime;
       // If timeout occurs, return empty results instead of crashing
       if (error.message.includes('timeout')) {
+        this.logger.warn(`Database query timeout after ${duration}ms, returning empty results`);
         bookings = [];
         total = 0;
       } else {
+        this.logger.error(`Failed to fetch bookings after ${duration}ms`, error);
         throw error;
       }
     }
