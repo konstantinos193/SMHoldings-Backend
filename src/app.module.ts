@@ -48,7 +48,14 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
         stores: [
           new KeyvRedis(
             config.get<string>('REDIS_URL', 'redis://redis:6379'),
-            { namespace: 'stefanos' },
+            {
+              namespace: 'stefanos',
+              // Never let an unreachable/slow Redis hang the request lifecycle.
+              // Cache ops resolve to undefined instead of queueing forever.
+              throwOnConnectError: false,
+              throwOnErrors: false,
+              connectionTimeout: 2000,
+            },
           ),
         ],
         ttl: 0, // per-call TTL; no global default
