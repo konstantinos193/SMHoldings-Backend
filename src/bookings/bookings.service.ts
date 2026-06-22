@@ -81,64 +81,45 @@ export class BookingsService {
       ];
     }
 
-    // Add timeout to prevent hanging on remote DB queries
-    const queryTimeout = 15000; // 15 seconds for remote Turso DB
     let bookings, total;
-    
+
     try {
       [bookings, total] = await Promise.all([
-        Promise.race([
-          this.prisma.booking.findMany({
-            where,
-            include: {
-              property: {
-                select: {
-                  id: true,
-                  titleGr: true,
-                  titleEn: true,
-                  images: true,
-                  address: true,
-                  city: true,
-                },
-              },
-              guest: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                  phone: true,
-                },
+        this.prisma.booking.findMany({
+          where,
+          include: {
+            property: {
+              select: {
+                id: true,
+                titleGr: true,
+                titleEn: true,
+                images: true,
+                address: true,
+                city: true,
               },
             },
-            orderBy,
-            skip,
-            take: limit,
-          }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Database query timeout')), queryTimeout)
-          ),
-        ]),
-        Promise.race([
-          this.prisma.booking.count({ where }),
-          new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('Database count timeout')), queryTimeout)
-          ),
-        ]),
+            guest: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+              },
+            },
+          },
+          orderBy,
+          skip,
+          take: limit,
+        }),
+        this.prisma.booking.count({ where }),
       ]);
-      
+
       const duration = Date.now() - startTime;
       this.logger.log(`Bookings fetched successfully in ${duration}ms - count: ${total}`);
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      // If timeout occurs, return empty results instead of crashing
-      if (error.message.includes('timeout')) {
-        this.logger.warn(`Database query timeout after ${duration}ms, returning empty results`);
-        bookings = [];
-        total = 0;
-      } else {
-        this.logger.error(`Failed to fetch bookings after ${duration}ms`, error);
-        throw error;
-      }
+      this.logger.error(`Failed to fetch bookings after ${duration}ms: ${error?.message}`);
+      throw error;
     }
 
     const pagination = getPagination(page, limit, total);
