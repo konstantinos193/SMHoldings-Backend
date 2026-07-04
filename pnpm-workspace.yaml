@@ -54,3 +54,4 @@ minimumReleaseAgeExclude:
   - '@swc/core-win32-x64-msvc@1.15.43'
   - '@swc/core@1.15.43'
   - ts-loader@9.6.2
+  - tsx@4.23.0
