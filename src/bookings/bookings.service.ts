@@ -318,7 +318,7 @@ export class BookingsService {
     // Property-level check: when no roomId, scope to property-level (non-room) bookings.
     const conflictWhere: any = {
       status: { in: ['CONFIRMED', 'CHECKED_IN', 'PENDING'] },
-      OR: [{ checkIn: { lte: checkOut }, checkOut: { gte: checkIn } }],
+      OR: [{ checkIn: { lt: checkOut }, checkOut: { gt: checkIn } }],
     };
 
     if (createBookingDto.roomId) {
@@ -710,7 +710,7 @@ export class BookingsService {
     const conflictWhere: any = {
       id: { not: booking.id }, // Exclude current booking
       status: { in: ['CONFIRMED', 'CHECKED_IN'] },
-      OR: [{ checkIn: { lte: newCheckOut }, checkOut: { gte: newCheckIn } }],
+      OR: [{ checkIn: { lt: newCheckOut }, checkOut: { gt: newCheckIn } }],
     };
 
     if (rescheduleDto.roomId) {

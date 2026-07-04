@@ -60,8 +60,8 @@ export class ExternalBookingsService {
         status: { in: ['CONFIRMED', 'CHECKED_IN'] },
         OR: [
           {
-            checkIn: { lte: checkOut },
-            checkOut: { gte: checkIn },
+            checkIn: { lt: checkOut },
+            checkOut: { gt: checkIn },
           },
         ],
       },
