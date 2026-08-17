@@ -423,14 +423,48 @@ export class RoomsService {
   async getRoomAvailability(roomId: string, startDate: Date, endDate: Date) {
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
-      include: { property: true },
+      select: { id: true, propertyId: true },
     });
 
     if (!room) {
       throw new NotFoundException('Room not found');
     }
 
-    return this.calculatePropertyAvailability(room.propertyId, startDate, endDate);
+    const [blockedRecords, blockedRules, bookings] = await Promise.all([
+      // Property-wide blocked dates still apply to every room inside it
+      this.prisma.propertyAvailability.findMany({
+        where: {
+          propertyId: room.propertyId,
+          date: { gte: startDate, lte: endDate },
+          available: false,
+        },
+      }),
+      this.prisma.roomAvailabilityRule.findMany({
+        where: {
+          roomId,
+          isAvailable: false,
+          startDate: { lt: endDate },
+          endDate: { gt: startDate },
+        },
+      }),
+      this.prisma.booking.findMany({
+        where: {
+          roomId,
+          status: { in: ['CONFIRMED', 'CHECKED_IN', 'PENDING'] },
+          // Half-open interval: a stay ending on the requested check-in day does not
+          // conflict, so same-day turnover stays bookable.
+          checkIn: { lt: endDate },
+          checkOut: { gt: startDate },
+        },
+      }),
+    ]);
+
+    return {
+      available:
+        blockedRecords.length === 0 && blockedRules.length === 0 && bookings.length === 0,
+      availability: blockedRecords,
+      conflictingBookings: bookings.length,
+    };
   }
 
   // Pricing Rules CRUD
@@ -923,39 +957,5 @@ export class RoomsService {
     };
   }
 
-  private async calculatePropertyAvailability(propertyId: string, startDate: Date, endDate: Date) {
-    const [blockedRecords, bookings] = await Promise.all([
-      this.prisma.propertyAvailability.findMany({
-        where: {
-          propertyId,
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-          available: false,
-        },
-      }),
-      this.prisma.booking.findMany({
-        where: {
-          propertyId,
-          status: {
-            in: ['CONFIRMED', 'CHECKED_IN', 'PENDING'],
-          },
-          OR: [
-            {
-              checkIn: { lt: endDate },
-              checkOut: { gt: startDate },
-            },
-          ],
-        },
-      }),
-    ]);
-
-    return {
-      available: blockedRecords.length === 0 && bookings.length === 0,
-      availability: blockedRecords,
-      conflictingBookings: bookings.length,
-    };
-  }
 }
 

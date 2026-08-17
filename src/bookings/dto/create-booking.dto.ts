@@ -78,5 +78,10 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   paymentMethod?: string;
+
+  @ApiPropertyOptional({ enum: BookingStatus, example: BookingStatus.PENDING })
+  @IsOptional()
+  @IsEnum(BookingStatus)
+  status?: BookingStatus;
 }
 
