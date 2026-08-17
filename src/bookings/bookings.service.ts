@@ -287,7 +287,7 @@ export class BookingsService {
   async create(
     createBookingDto: CreateBookingDto,
     guestId: string,
-    status: BookingStatus = BookingStatus.CONFIRMED,
+    status: BookingStatus = BookingStatus.PENDING,
   ) {
     const property = await this.prisma.property.findUnique({
       where: { id: createBookingDto.propertyId },
@@ -650,11 +650,16 @@ export class BookingsService {
       },
     });
 
+    // Payment no longer forces the booking back to CONFIRMED. The owner drives the
+    // lifecycle manually (PENDING → CONFIRMED → CHECKED_IN → COMPLETED); paying while
+    // the guest is in-house closes the stay, otherwise the status is left untouched.
+    const nextStatus = booking.status === 'CHECKED_IN' ? 'COMPLETED' : booking.status;
+
     const updatedBooking = await this.prisma.booking.update({
       where: { id },
       data: {
         paymentStatus: PaymentStatus.COMPLETED,
-        status: 'CONFIRMED',
+        status: nextStatus,
       },
     });
 
@@ -702,14 +707,15 @@ export class BookingsService {
       throw new BadRequestException('Check-out must be after check-in');
     }
 
-    if (newCheckIn < new Date()) {
-      throw new BadRequestException('Cannot reschedule to past dates');
-    }
+    // No past-date guard: this endpoint is owner/admin/manager only (checked above) and
+    // correcting a stay that already started is routine front-desk work. The old
+    // `newCheckIn < new Date()` compared a midnight date against the current time, which
+    // also made rescheduling to today impossible.
 
     // Check availability for new dates
     const conflictWhere: any = {
       id: { not: booking.id }, // Exclude current booking
-      status: { in: ['CONFIRMED', 'CHECKED_IN'] },
+      status: { in: ['CONFIRMED', 'CHECKED_IN', 'PENDING'] },
       OR: [{ checkIn: { lt: newCheckOut }, checkOut: { gt: newCheckIn } }],
     };
 

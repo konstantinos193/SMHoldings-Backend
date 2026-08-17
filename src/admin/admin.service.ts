@@ -1,11 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { PrismaService } from '../prisma/prisma.service';
+
+const DASHBOARD_KEY = 'admin:dashboard';
+const DASHBOARD_TTL_MS = 30 * 1000; // rollup counters; 30s of staleness is fine
+// Cache is a latency optimization, never a hard dependency. Bound every cache op so a
+// degraded Redis can only ever cost this much (KeyvRedis alone waits out its 2s
+// connectionTimeout, which is what made cached endpoints take seconds).
+const CACHE_TIMEOUT_MS = 200;
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private cache: Cache,
+  ) {}
 
   async getDashboardStats() {
+    const cached = await this.safeCacheGet<any>(DASHBOARD_KEY);
+    if (cached) return cached;
+
     const [
       totalUsers,
       totalProperties,
@@ -24,10 +39,19 @@ export class AdminService {
         _sum: { totalPrice: true },
         where: { paymentStatus: 'COMPLETED' },
       }),
+      // Select only what the dashboard renders. `include` alone pulled every booking
+      // column (externalData, iCalUid, specialRequests, ...) and dominated the payload.
       this.prisma.booking.findMany({
         take: 10,
         orderBy: { createdAt: 'desc' },
-        include: {
+        select: {
+          id: true,
+          status: true,
+          checkIn: true,
+          checkOut: true,
+          totalPrice: true,
+          guestName: true,
+          createdAt: true,
           property: { select: { titleEn: true, titleGr: true } },
           guest: { select: { name: true, email: true } },
         },
@@ -45,7 +69,7 @@ export class AdminService {
       .reduce((sum, b) => sum + b._count.id, 0);
     const pendingBookings = bookingCounts.find((b) => b.status === 'PENDING')?._count.id ?? 0;
 
-    return {
+    const result = {
       overview: {
         totalUsers,
         totalProperties,
@@ -57,6 +81,35 @@ export class AdminService {
       recentBookings,
       recentUsers,
     };
+
+    // Fire-and-forget: never await the cache write on the request path.
+    this.safeCacheSet(DASHBOARD_KEY, result);
+    return result;
+  }
+
+  /** Best-effort cache read bounded by a hard timeout. Undefined on miss/slow/error. */
+  private async safeCacheGet<T>(key: string): Promise<T | undefined> {
+    try {
+      const result = await Promise.race([
+        this.cache.get<T>(key),
+        new Promise<undefined>((_, reject) =>
+          setTimeout(() => reject(new Error('cache get timeout')), CACHE_TIMEOUT_MS),
+        ),
+      ]);
+      return result ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Best-effort cache write. Errors/timeouts are swallowed so they can never block. */
+  private safeCacheSet(key: string, value: unknown): void {
+    Promise.race([
+      this.cache.set(key, value, DASHBOARD_TTL_MS),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('cache set timeout')), CACHE_TIMEOUT_MS),
+      ),
+    ]).catch(() => undefined);
   }
 
   async getAllUsers(page: number = 1, limit: number = 20) {

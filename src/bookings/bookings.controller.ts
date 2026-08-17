@@ -42,7 +42,8 @@ export class BookingsController {
   @Post()
   @ApiOperation({ summary: 'Create booking' })
   create(@Body() createBookingDto: CreateBookingDto, @CurrentUser() userId: string) {
-    return this.bookingsService.create(createBookingDto, userId);
+    // Admin-created bookings start as PENDING (orange) unless the admin picks a status
+    return this.bookingsService.create(createBookingDto, userId, createBookingDto.status);
   }
 
   @Patch(':id')
