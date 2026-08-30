@@ -81,6 +81,9 @@ export class RoomsController {
     return this.roomsService.findAllBookable();
   }
 
+  // `:id` accepts either the room UUID or its public slug
+  // (e.g. `apartment-03-first-floor`), so indexed UUID URLs keep resolving
+  // while the public site 301s them to the readable one.
   @Public()
   @Get('public/:id')
   findOnePublic(@Param('id') id: string) {
@@ -112,6 +115,14 @@ export class RoomsController {
   @UseGuards(RolesGuard)
   create(@Body() createRoomDto: CreateRoomDto, @CurrentUserWithRole() user: any) {
     return this.roomsService.create(createRoomDto, this.getUserId(user));
+  }
+
+  @Post('backfill-slugs')
+  @Roles('ADMIN')
+  @UseGuards(RolesGuard)
+  @ApiOperation({ summary: 'Assign public URL slugs to any rooms still missing one' })
+  backfillSlugs() {
+    return this.roomsService.backfillSlugs();
   }
 
   @Get('property/:propertyId')

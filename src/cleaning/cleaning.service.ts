@@ -97,8 +97,13 @@ export class CleaningService {
         ...(updateDto.frequency && { frequency: updateDto.frequency }),
         ...(updateDto.assignedCleaner !== undefined && { assignedCleaner: updateDto.assignedCleaner }),
         ...(updateDto.notes !== undefined && { notes: updateDto.notes }),
-        ...(updateDto.nextCleaning && { nextCleaning: new Date(updateDto.nextCleaning) }),
-        ...(updateDto.lastCleaned && { lastCleaned: new Date(updateDto.lastCleaned) }),
+        // `null` clears the date; only an omitted key leaves it untouched.
+        ...(updateDto.nextCleaning !== undefined && {
+          nextCleaning: updateDto.nextCleaning ? new Date(updateDto.nextCleaning) : null,
+        }),
+        ...(updateDto.lastCleaned !== undefined && {
+          lastCleaned: updateDto.lastCleaned ? new Date(updateDto.lastCleaned) : null,
+        }),
       },
       include: {
         property: { select: { id: true, titleGr: true, titleEn: true, address: true, city: true, status: true } },
@@ -184,7 +189,7 @@ export class CleaningService {
             : new Date(),
         );
 
-    return this.prisma.cleaningSchedule.create({
+    const created = await this.prisma.cleaningSchedule.create({
       data: {
         ...createScheduleDto,
         ownerId: userId,
@@ -193,8 +198,12 @@ export class CleaningService {
           : null,
         nextCleaning,
       },
-      include: { property: true },
+      include: {
+        property: { select: { id: true, titleGr: true, titleEn: true, address: true, city: true, status: true } },
+      },
     });
+
+    return { success: true, data: created };
   }
 
   async updateCleaningDate(
@@ -225,10 +234,13 @@ export class CleaningService {
       this.prisma.cleaningSchedule.update({
         where: { id: scheduleId },
         data: { lastCleaned: cleanedDate, nextCleaning },
+        include: {
+          property: { select: { id: true, titleGr: true, titleEn: true, address: true, city: true, status: true } },
+        },
       }),
     ]);
 
-    return updated;
+    return { success: true, data: updated };
   }
 
   async getPropertyCleanliness(propertyId: string) {

@@ -40,29 +40,39 @@ export class AnalyticsService {
     return { startDate, endDate };
   }
 
-  private getBucketKey(date: Date, period: string): string {
+  /** YYYY-MM-DD from local calendar parts; toISOString() would shift the day east of UTC. */
+  private toLocalDateKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+      date.getDate(),
+    ).padStart(2, '0')}`;
+  }
+
+  /** First instant of the bucket a date belongs to. */
+  private bucketStart(date: Date, period: string): Date {
     const d = new Date(date);
-    if (period === 'DAILY') {
-      return d.toISOString().split('T')[0];
-    }
+    d.setHours(0, 0, 0, 0);
+    if (period === 'DAILY') return d;
     if (period === 'WEEKLY') {
       const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-      const monday = new Date(d);
-      monday.setDate(diff);
-      return monday.toISOString().split('T')[0];
+      d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
+      return d;
     }
-    if (period === 'MONTHLY') {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-    }
-    // YEARLY / QUARTERLY
-    return `${d.getFullYear()}-01-01`;
+    if (period === 'MONTHLY') return new Date(d.getFullYear(), d.getMonth(), 1);
+    return new Date(d.getFullYear(), 0, 1);
+  }
+
+  private getBucketKey(date: Date, period: string): string {
+    return this.toLocalDateKey(this.bucketStart(date, period));
   }
 
   private generateBuckets(startDate: Date, endDate: Date, period: string): string[] {
     const buckets: string[] = [];
     const seen = new Set<string>();
-    const current = new Date(startDate);
+    // Step from the START OF the first bucket. Advancing from a raw mid-month
+    // startDate skipped the final bucket: a 31 Jul → 30 Aug window emitted only
+    // "July" (Jul 31 + 1 month = Aug 31 > endDate), so every August booking
+    // landed in a bucket the chart never rendered and revenue read as zero.
+    const current = this.bucketStart(startDate, period);
     while (current <= endDate) {
       const key = this.getBucketKey(current, period);
       if (!seen.has(key)) {
