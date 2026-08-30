@@ -293,12 +293,37 @@ export class RoomsService {
 
     return availableRooms.map((room) => {
       const roomRules = priceRules.filter((r) => r.roomId === room.id);
-      if (roomRules.length === 0) {
-        return { ...room, effectivePrice: room.basePrice };
+      const { subtotal, nights, nightly } = computeNightlySubtotal(
+        room.basePrice,
+        roomRules,
+        startDate,
+        endDate,
+      );
+      if (nights === 0) {
+        return {
+          ...room,
+          effectivePrice: room.basePrice,
+          stayTotal: room.basePrice,
+          nightlyRates: [],
+          priceVaries: false,
+          minNightlyPrice: room.basePrice,
+          maxNightlyPrice: room.basePrice,
+        };
       }
-      const { subtotal, nights } = computeNightlySubtotal(room.basePrice, roomRules, startDate, endDate);
-      if (nights === 0) return { ...room, effectivePrice: room.basePrice };
-      return { ...room, effectivePrice: Math.round((subtotal / nights) * 100) / 100 };
+      const prices = nightly.map((n) => n.price);
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      return {
+        ...room,
+        // Average nightly rate — kept for backwards compatibility with existing clients
+        effectivePrice: Math.round((subtotal / nights) * 100) / 100,
+        // Exact total for the requested stay (never avg * nights, which can drift on rounding)
+        stayTotal: Math.round(subtotal * 100) / 100,
+        nightlyRates: nightly,
+        priceVaries: min !== max,
+        minNightlyPrice: min,
+        maxNightlyPrice: max,
+      };
     });
   }
 
