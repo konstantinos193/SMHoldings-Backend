@@ -72,10 +72,15 @@ export class ReviewsService {
     return review;
   }
 
-  async findAll(propertyId?: string, page = 1, limit = 20) {
+  /**
+   * `includeHidden` is only ever set by the admin-guarded route. The public
+   * GET /reviews keeps its isPublic filter — otherwise hiding a review would
+   * also hide it from the admin panel, making moderation a one-way trapdoor.
+   */
+  async findAll(propertyId?: string, page = 1, limit = 20, includeHidden = false) {
     const pageNum = +page;
     const limitNum = +limit;
-    const where: any = { isPublic: true };
+    const where: any = includeHidden ? {} : { isPublic: true };
     if (propertyId) {
       where.propertyId = propertyId;
     }
@@ -146,7 +151,12 @@ export class ReviewsService {
     return review;
   }
 
-  async update(id: string, updateReviewDto: UpdateReviewDto, userId: string) {
+  async update(
+    id: string,
+    updateReviewDto: UpdateReviewDto,
+    userId: string,
+    userRole?: string,
+  ) {
     const review = await this.prisma.review.findUnique({
       where: { id },
       include: { property: true },
@@ -156,24 +166,35 @@ export class ReviewsService {
       throw new NotFoundException('Review not found');
     }
 
-    // Only guest can update their review, or property owner can add response
+    // Admins moderate every review; remove() already worked this way, update() did not,
+    // so responding to a review on someone else's property used to 403.
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
     const isGuest = review.guestId === userId;
     const isOwner = review.property.ownerId === userId;
 
-    if (!isGuest && !isOwner) {
+    if (!isAdmin && !isGuest && !isOwner) {
       throw new ForbiddenException('Unauthorized to update this review');
     }
 
     // Guests can only update their own review (not response)
-    if (isGuest && updateReviewDto.response) {
+    if (isGuest && !isAdmin && updateReviewDto.response) {
       throw new ForbiddenException('Guests cannot add host responses');
     }
 
-    // Owners can only add responses
-    if (isOwner && updateReviewDto.response) {
+    // Hosts and admins may set the response and the visibility — never the
+    // guest's own ratings or wording.
+    if (!isGuest && (isOwner || isAdmin)) {
+      const data: any = {};
+      if (updateReviewDto.response !== undefined) data.response = updateReviewDto.response;
+      if (updateReviewDto.isPublic !== undefined) data.isPublic = updateReviewDto.isPublic;
+
+      if (Object.keys(data).length === 0) {
+        throw new ForbiddenException('Only the response and visibility can be changed');
+      }
+
       return this.prisma.review.update({
         where: { id },
-        data: { response: updateReviewDto.response },
+        data,
         include: {
           guest: {
             select: {
