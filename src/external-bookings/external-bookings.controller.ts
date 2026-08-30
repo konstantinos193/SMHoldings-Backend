@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@ne
 import { ExternalBookingsService } from './external-bookings.service';
 import { CreateExternalBookingDto } from './dto/create-external-booking.dto';
 import { UpdateExternalBookingDto } from './dto/update-external-booking.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryExternalBookingsDto } from './dto/query-external-bookings.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('External Bookings')
@@ -39,7 +39,7 @@ export class ExternalBookingsController {
   @ApiOperation({ summary: 'List all external bookings (non-DIRECT)' })
   @ApiQuery({ name: 'source', required: false, enum: ['BOOKING_COM', 'AIRBNB', 'VRBO', 'EXPEDIA', 'MANUAL', 'OTHER'] })
   @ApiResponse({ status: 200 })
-  findAllExternal(@Query() query: PaginationDto & { source?: string }) {
+  findAllExternal(@Query() query: QueryExternalBookingsDto) {
     return this.externalBookingsService.findAllExternal(query);
   }
 

@@ -377,6 +377,7 @@ exports.Prisma.PaymentScalarFieldEnum = {
 exports.Prisma.RoomScalarFieldEnum = {
   id: 'id',
   propertyId: 'propertyId',
+  slug: 'slug',
   name: 'name',
   nameGr: 'nameGr',
   nameEn: 'nameEn',

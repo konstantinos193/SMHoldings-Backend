@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException, 
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateExternalBookingDto } from './dto/create-external-booking.dto';
 import { UpdateExternalBookingDto } from './dto/update-external-booking.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { QueryExternalBookingsDto } from './dto/query-external-bookings.dto';
 import { getPagination } from '../common/utils/pagination.util';
 
 @Injectable()
@@ -275,9 +275,12 @@ export class ExternalBookingsService {
   /**
    * List all external bookings, optionally filtered by source
    */
-  async findAllExternal(query: PaginationDto & { source?: string }) {
+  async findAllExternal(query: QueryExternalBookingsDto) {
     const { page = 1, limit = 10, sortBy, sortOrder = 'desc', source } = query;
-    const skip = (page - 1) * limit;
+    // Coerce defensively: Prisma rejects a string `take`, which surfaces as a 500.
+    const pageNum = +page;
+    const limitNum = +limit;
+    const skip = (pageNum - 1) * limitNum;
 
     const orderBy: any = {};
     if (sortBy) {
@@ -318,12 +321,12 @@ export class ExternalBookingsService {
         },
         orderBy,
         skip,
-        take: limit,
+        take: limitNum,
       }),
       this.prisma.booking.count({ where }),
     ]);
 
-    const pagination = getPagination(page, limit, total);
+    const pagination = getPagination(pageNum, limitNum, total);
 
     return {
       success: true,

@@ -9,10 +9,74 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreatePricingRuleDto, UpdatePricingRuleDto } from './dto/create-pricing-rule.dto';
 import { computeNightlySubtotal } from '../common/utils/price.util';
+import { buildRoomSlug, ensureUniqueSlug, isUuid } from './room-slug.util';
 
 @Injectable()
 export class RoomsService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * A slug that is free to use, derived from the room's name.
+   * `excludeId` lets an update keep the slug it already owns.
+   */
+  private async resolveSlug(
+    room: { id?: string; name?: string | null; nameEn?: string | null },
+    explicitSlug?: string | null,
+    excludeId?: string,
+  ): Promise<string> {
+    const base = explicitSlug ? buildRoomSlug({ ...room, name: explicitSlug, nameEn: null }) : buildRoomSlug(room);
+
+    const clashes = await this.prisma.room.findMany({
+      where: {
+        slug: { startsWith: base },
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+      select: { slug: true },
+    });
+
+    return ensureUniqueSlug(
+      base,
+      new Set(clashes.map((r) => r.slug).filter((s): s is string => Boolean(s))),
+    );
+  }
+
+  /**
+   * Prisma `where` clause that accepts either the UUID primary key or the
+   * public slug, so old UUID URLs keep resolving after the migration.
+   */
+  private roomIdentity(idOrSlug: string) {
+    return isUuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug };
+  }
+
+  /**
+   * Assigns slugs to every room that does not have one yet.
+   * Idempotent — safe to call on boot or from the backfill script.
+   */
+  async backfillSlugs(): Promise<{ updated: number; slugs: Record<string, string> }> {
+    const rooms = await this.prisma.room.findMany({
+      select: { id: true, name: true, nameEn: true, slug: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const taken = new Set(rooms.map((r) => r.slug).filter((s): s is string => Boolean(s)));
+    const slugs: Record<string, string> = {};
+    let updated = 0;
+
+    for (const room of rooms) {
+      if (room.slug) {
+        slugs[room.id] = room.slug;
+        continue;
+      }
+
+      const slug = ensureUniqueSlug(buildRoomSlug(room), taken);
+      taken.add(slug);
+      await this.prisma.room.update({ where: { id: room.id }, data: { slug } });
+      slugs[room.id] = slug;
+      updated += 1;
+    }
+
+    return { updated, slugs };
+  }
 
   async create(createRoomDto: CreateRoomDto, userId: string) {
     // Verify property exists and belongs to user
@@ -33,6 +97,9 @@ export class RoomsService {
       data: {
         ...createRoomDto,
         ownerId: userId,
+        // Public URLs address rooms by slug; derive one now so a new apartment
+        // never ships with a UUID-only URL.
+        slug: await this.resolveSlug(createRoomDto, createRoomDto.slug),
         amenities: createRoomDto.amenities || [],
         images: createRoomDto.images || [],
       },
@@ -124,6 +191,7 @@ export class RoomsService {
       select: {
         id: true,
         propertyId: true,
+        slug: true,
         name: true,
         nameGr: true,
         nameEn: true,
@@ -327,9 +395,13 @@ export class RoomsService {
     });
   }
 
-  async findOnePublic(id: string) {
+  /**
+   * @param idOrSlug the room's UUID or its public slug. Both resolve, so the
+   * UUID URLs Google already indexed keep working and can 301 to the slug.
+   */
+  async findOnePublic(idOrSlug: string) {
     const room = await this.prisma.room.findUnique({
-      where: { id }, // Remove isBookable filter to show all rooms
+      where: this.roomIdentity(idOrSlug), // no isBookable filter — show all rooms
       include: {
         property: {
           select: {
@@ -406,9 +478,17 @@ export class RoomsService {
       throw new ForbiddenException('You can only update your own rooms');
     }
 
+    // A room that has no slug yet, or one whose slug was explicitly changed,
+    // gets a fresh unique slug. An existing slug is otherwise left alone —
+    // changing it silently would break every indexed URL pointing at it.
+    const slug =
+      updateRoomDto.slug !== undefined
+        ? await this.resolveSlug({ ...room, ...updateRoomDto }, updateRoomDto.slug, id)
+        : room.slug ?? (await this.resolveSlug({ ...room, ...updateRoomDto }, null, id));
+
     return this.prisma.room.update({
       where: { id },
-      data: updateRoomDto,
+      data: { ...updateRoomDto, slug },
     });
   }
 
@@ -445,15 +525,19 @@ export class RoomsService {
     return { message: 'Room deleted successfully' };
   }
 
-  async getRoomAvailability(roomId: string, startDate: Date, endDate: Date) {
+  /** @param idOrSlug the room's UUID or its public slug. */
+  async getRoomAvailability(idOrSlug: string, startDate: Date, endDate: Date) {
     const room = await this.prisma.room.findUnique({
-      where: { id: roomId },
+      where: this.roomIdentity(idOrSlug),
       select: { id: true, propertyId: true },
     });
 
     if (!room) {
       throw new NotFoundException('Room not found');
     }
+
+    // Rules are keyed by the primary key, which the caller may not have passed.
+    const roomId = room.id;
 
     const [blockedRecords, blockedRules, bookings] = await Promise.all([
       // Property-wide blocked dates still apply to every room inside it

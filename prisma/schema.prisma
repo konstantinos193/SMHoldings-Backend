@@ -554,6 +554,11 @@ enum PaymentMethod {
 model Room {
   id          String   @id @default(uuid())
   propertyId  String
+  // Human-readable, stable URL segment (e.g. "apartment-01-ground-floor").
+  // Public sites address rooms by this instead of the UUID; the UUID stays the
+  // primary key so nothing internal has to change. Nullable so existing rows
+  // stay valid until the backfill script runs.
+  slug        String?  @unique
   name        String
   nameGr      String?
   nameEn      String?

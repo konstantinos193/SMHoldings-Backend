@@ -16,6 +16,15 @@ export class CreateRoomDto {
   @IsString()
   name: string;
 
+  /**
+   * Optional override for the public URL segment. Left unset, one is derived
+   * from the name (`Apartment 03 – First Floor` -> `apartment-03-first-floor`).
+   * Whatever is supplied is normalised and de-duplicated before it is stored.
+   */
+  @IsString()
+  @IsOptional()
+  slug?: string;
+
   @IsString()
   @IsOptional()
   nameGr?: string;

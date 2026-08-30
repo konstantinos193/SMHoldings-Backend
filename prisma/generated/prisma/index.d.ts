@@ -21781,6 +21781,7 @@ export namespace Prisma {
   export type RoomMinAggregateOutputType = {
     id: string | null
     propertyId: string | null
+    slug: string | null
     name: string | null
     nameGr: string | null
     nameEn: string | null
@@ -21803,6 +21804,7 @@ export namespace Prisma {
   export type RoomMaxAggregateOutputType = {
     id: string | null
     propertyId: string | null
+    slug: string | null
     name: string | null
     nameGr: string | null
     nameEn: string | null
@@ -21825,6 +21827,7 @@ export namespace Prisma {
   export type RoomCountAggregateOutputType = {
     id: number
     propertyId: number
+    slug: number
     name: number
     nameGr: number
     nameEn: number
@@ -21867,6 +21870,7 @@ export namespace Prisma {
   export type RoomMinAggregateInputType = {
     id?: true
     propertyId?: true
+    slug?: true
     name?: true
     nameGr?: true
     nameEn?: true
@@ -21889,6 +21893,7 @@ export namespace Prisma {
   export type RoomMaxAggregateInputType = {
     id?: true
     propertyId?: true
+    slug?: true
     name?: true
     nameGr?: true
     nameEn?: true
@@ -21911,6 +21916,7 @@ export namespace Prisma {
   export type RoomCountAggregateInputType = {
     id?: true
     propertyId?: true
+    slug?: true
     name?: true
     nameGr?: true
     nameEn?: true
@@ -22022,6 +22028,7 @@ export namespace Prisma {
   export type RoomGroupByOutputType = {
     id: string
     propertyId: string
+    slug: string | null
     name: string
     nameGr: string | null
     nameEn: string | null
@@ -22065,6 +22072,7 @@ export namespace Prisma {
   export type RoomSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     propertyId?: boolean
+    slug?: boolean
     name?: boolean
     nameGr?: boolean
     nameEn?: boolean
@@ -22094,6 +22102,7 @@ export namespace Prisma {
   export type RoomSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     propertyId?: boolean
+    slug?: boolean
     name?: boolean
     nameGr?: boolean
     nameEn?: boolean
@@ -22120,6 +22129,7 @@ export namespace Prisma {
   export type RoomSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     propertyId?: boolean
+    slug?: boolean
     name?: boolean
     nameGr?: boolean
     nameEn?: boolean
@@ -22146,6 +22156,7 @@ export namespace Prisma {
   export type RoomSelectScalar = {
     id?: boolean
     propertyId?: boolean
+    slug?: boolean
     name?: boolean
     nameGr?: boolean
     nameEn?: boolean
@@ -22167,7 +22178,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type RoomOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "propertyId" | "name" | "nameGr" | "nameEn" | "nameIt" | "type" | "capacity" | "maxAdults" | "maxChildren" | "maxInfants" | "basePrice" | "isBookable" | "amenities" | "images" | "descriptionGr" | "descriptionEn" | "descriptionIt" | "ownerId" | "createdAt" | "updatedAt", ExtArgs["result"]["room"]>
+  export type RoomOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "propertyId" | "slug" | "name" | "nameGr" | "nameEn" | "nameIt" | "type" | "capacity" | "maxAdults" | "maxChildren" | "maxInfants" | "basePrice" | "isBookable" | "amenities" | "images" | "descriptionGr" | "descriptionEn" | "descriptionIt" | "ownerId" | "createdAt" | "updatedAt", ExtArgs["result"]["room"]>
   export type RoomInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     property?: boolean | PropertyDefaultArgs<ExtArgs>
     owner?: boolean | UserDefaultArgs<ExtArgs>
@@ -22195,6 +22206,7 @@ export namespace Prisma {
     scalars: $Extensions.GetPayloadResult<{
       id: string
       propertyId: string
+      slug: string | null
       name: string
       nameGr: string | null
       nameEn: string | null
@@ -22643,6 +22655,7 @@ export namespace Prisma {
   interface RoomFieldRefs {
     readonly id: FieldRef<"Room", 'String'>
     readonly propertyId: FieldRef<"Room", 'String'>
+    readonly slug: FieldRef<"Room", 'String'>
     readonly name: FieldRef<"Room", 'String'>
     readonly nameGr: FieldRef<"Room", 'String'>
     readonly nameEn: FieldRef<"Room", 'String'>
@@ -37477,6 +37490,7 @@ export namespace Prisma {
   export const RoomScalarFieldEnum: {
     id: 'id',
     propertyId: 'propertyId',
+    slug: 'slug',
     name: 'name',
     nameGr: 'nameGr',
     nameEn: 'nameEn',
@@ -39572,6 +39586,7 @@ export namespace Prisma {
     NOT?: RoomWhereInput | RoomWhereInput[]
     id?: StringFilter<"Room"> | string
     propertyId?: StringFilter<"Room"> | string
+    slug?: StringNullableFilter<"Room"> | string | null
     name?: StringFilter<"Room"> | string
     nameGr?: StringNullableFilter<"Room"> | string | null
     nameEn?: StringNullableFilter<"Room"> | string | null
@@ -39600,6 +39615,7 @@ export namespace Prisma {
   export type RoomOrderByWithRelationInput = {
     id?: SortOrder
     propertyId?: SortOrder
+    slug?: SortOrderInput | SortOrder
     name?: SortOrder
     nameGr?: SortOrderInput | SortOrder
     nameEn?: SortOrderInput | SortOrder
@@ -39627,6 +39643,7 @@ export namespace Prisma {
 
   export type RoomWhereUniqueInput = Prisma.AtLeast<{
     id?: string
+    slug?: string
     AND?: RoomWhereInput | RoomWhereInput[]
     OR?: RoomWhereInput[]
     NOT?: RoomWhereInput | RoomWhereInput[]
@@ -39654,11 +39671,12 @@ export namespace Prisma {
     owner?: XOR<UserScalarRelationFilter, UserWhereInput>
     roomContent?: XOR<RoomContentNullableScalarRelationFilter, RoomContentWhereInput> | null
     availabilityRules?: RoomAvailabilityRuleListRelationFilter
-  }, "id">
+  }, "id" | "slug">
 
   export type RoomOrderByWithAggregationInput = {
     id?: SortOrder
     propertyId?: SortOrder
+    slug?: SortOrderInput | SortOrder
     name?: SortOrder
     nameGr?: SortOrderInput | SortOrder
     nameEn?: SortOrderInput | SortOrder
@@ -39691,6 +39709,7 @@ export namespace Prisma {
     NOT?: RoomScalarWhereWithAggregatesInput | RoomScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"Room"> | string
     propertyId?: StringWithAggregatesFilter<"Room"> | string
+    slug?: StringNullableWithAggregatesFilter<"Room"> | string | null
     name?: StringWithAggregatesFilter<"Room"> | string
     nameGr?: StringNullableWithAggregatesFilter<"Room"> | string | null
     nameEn?: StringNullableWithAggregatesFilter<"Room"> | string | null
@@ -42692,6 +42711,7 @@ export namespace Prisma {
 
   export type RoomCreateInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -42719,6 +42739,7 @@ export namespace Prisma {
   export type RoomUncheckedCreateInput = {
     id?: string
     propertyId: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -42744,6 +42765,7 @@ export namespace Prisma {
 
   export type RoomUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -42771,6 +42793,7 @@ export namespace Prisma {
   export type RoomUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     propertyId?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -42797,6 +42820,7 @@ export namespace Prisma {
   export type RoomCreateManyInput = {
     id?: string
     propertyId: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -42820,6 +42844,7 @@ export namespace Prisma {
 
   export type RoomUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -42843,6 +42868,7 @@ export namespace Prisma {
   export type RoomUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     propertyId?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -45713,6 +45739,7 @@ export namespace Prisma {
   export type RoomCountOrderByAggregateInput = {
     id?: SortOrder
     propertyId?: SortOrder
+    slug?: SortOrder
     name?: SortOrder
     nameGr?: SortOrder
     nameEn?: SortOrder
@@ -45745,6 +45772,7 @@ export namespace Prisma {
   export type RoomMaxOrderByAggregateInput = {
     id?: SortOrder
     propertyId?: SortOrder
+    slug?: SortOrder
     name?: SortOrder
     nameGr?: SortOrder
     nameEn?: SortOrder
@@ -45767,6 +45795,7 @@ export namespace Prisma {
   export type RoomMinOrderByAggregateInput = {
     id?: SortOrder
     propertyId?: SortOrder
+    slug?: SortOrder
     name?: SortOrder
     nameGr?: SortOrder
     nameEn?: SortOrder
@@ -49457,6 +49486,7 @@ export namespace Prisma {
 
   export type RoomCreateWithoutOwnerInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -49483,6 +49513,7 @@ export namespace Prisma {
   export type RoomUncheckedCreateWithoutOwnerInput = {
     id?: string
     propertyId: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -49893,6 +49924,7 @@ export namespace Prisma {
     NOT?: RoomScalarWhereInput | RoomScalarWhereInput[]
     id?: StringFilter<"Room"> | string
     propertyId?: StringFilter<"Room"> | string
+    slug?: StringNullableFilter<"Room"> | string | null
     name?: StringFilter<"Room"> | string
     nameGr?: StringNullableFilter<"Room"> | string | null
     nameEn?: StringNullableFilter<"Room"> | string | null
@@ -50269,6 +50301,7 @@ export namespace Prisma {
 
   export type RoomCreateWithoutPropertyInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -50294,6 +50327,7 @@ export namespace Prisma {
 
   export type RoomUncheckedCreateWithoutPropertyInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -56089,6 +56123,7 @@ export namespace Prisma {
 
   export type RoomCreateWithoutRoomContentInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -56115,6 +56150,7 @@ export namespace Prisma {
   export type RoomUncheckedCreateWithoutRoomContentInput = {
     id?: string
     propertyId: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -56155,6 +56191,7 @@ export namespace Prisma {
 
   export type RoomUpdateWithoutRoomContentInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -56181,6 +56218,7 @@ export namespace Prisma {
   export type RoomUncheckedUpdateWithoutRoomContentInput = {
     id?: StringFieldUpdateOperationsInput | string
     propertyId?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -56205,6 +56243,7 @@ export namespace Prisma {
 
   export type RoomCreateWithoutAvailabilityRulesInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -56231,6 +56270,7 @@ export namespace Prisma {
   export type RoomUncheckedCreateWithoutAvailabilityRulesInput = {
     id?: string
     propertyId: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -56271,6 +56311,7 @@ export namespace Prisma {
 
   export type RoomUpdateWithoutAvailabilityRulesInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -56297,6 +56338,7 @@ export namespace Prisma {
   export type RoomUncheckedUpdateWithoutAvailabilityRulesInput = {
     id?: StringFieldUpdateOperationsInput | string
     propertyId?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -56847,6 +56889,7 @@ export namespace Prisma {
   export type RoomCreateManyOwnerInput = {
     id?: string
     propertyId: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -57353,6 +57396,7 @@ export namespace Prisma {
 
   export type RoomUpdateWithoutOwnerInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -57379,6 +57423,7 @@ export namespace Prisma {
   export type RoomUncheckedUpdateWithoutOwnerInput = {
     id?: StringFieldUpdateOperationsInput | string
     propertyId?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -57404,6 +57449,7 @@ export namespace Prisma {
   export type RoomUncheckedUpdateManyWithoutOwnerInput = {
     id?: StringFieldUpdateOperationsInput | string
     propertyId?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -57595,6 +57641,7 @@ export namespace Prisma {
 
   export type RoomCreateManyPropertyInput = {
     id?: string
+    slug?: string | null
     name: string
     nameGr?: string | null
     nameEn?: string | null
@@ -57957,6 +58004,7 @@ export namespace Prisma {
 
   export type RoomUpdateWithoutPropertyInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -57982,6 +58030,7 @@ export namespace Prisma {
 
   export type RoomUncheckedUpdateWithoutPropertyInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
@@ -58007,6 +58056,7 @@ export namespace Prisma {
 
   export type RoomUncheckedUpdateManyWithoutPropertyInput = {
     id?: StringFieldUpdateOperationsInput | string
+    slug?: NullableStringFieldUpdateOperationsInput | string | null
     name?: StringFieldUpdateOperationsInput | string
     nameGr?: NullableStringFieldUpdateOperationsInput | string | null
     nameEn?: NullableStringFieldUpdateOperationsInput | string | null
