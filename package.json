@@ -25,7 +25,8 @@
     "db:seed:admin": "tsx scripts/seed-admin.ts",
     "db:migrate": "node scripts/migrate-db.js",
     "db:backfill:slugs": "tsx scripts/backfill-room-slugs.ts",
-    "db:check-drift": "node scripts/check-schema-drift.js"
+    "db:check-drift": "node scripts/check-schema-drift.js",
+    "db:migrate:images": "tsx scripts/rename-room-images.ts"
   },
   "dependencies": {
     "@keyv/redis": "^5.1.6",

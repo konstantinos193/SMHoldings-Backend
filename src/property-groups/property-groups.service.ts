@@ -11,8 +11,17 @@ import { UpdatePropertyGroupDto } from './dto/update-property-group.dto';
 export class PropertyGroupsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * findAll already treats ADMIN/MANAGER as able to see every group, but the
+   * per-group checks below did not — so an admin could list groups and then get
+   * 403 opening or editing any group they did not personally own.
+   */
+  private isAdmin(userRole?: string): boolean {
+    return userRole === 'ADMIN' || userRole === 'MANAGER';
+  }
+
   async create(createPropertyGroupDto: CreatePropertyGroupDto, userId: string) {
-    return this.prisma.propertyGroup.create({
+    const group = await this.prisma.propertyGroup.create({
       data: {
         ...createPropertyGroupDto,
         ownerId: userId,
@@ -21,6 +30,8 @@ export class PropertyGroupsService {
         properties: true,
       },
     });
+
+    return { success: true, data: group };
   }
 
   async findAll(userId: string, userRole?: string, page = 1, limit = 20) {
@@ -63,7 +74,8 @@ export class PropertyGroupsService {
     };
   }
 
-  async findOne(id: string, userId: string) {
+  /** Loads a group and enforces access. Returns the raw record for internal callers. */
+  private async loadGroup(id: string, userId: string, userRole?: string) {
     const group = await this.prisma.propertyGroup.findUnique({
       where: { id },
       include: {
@@ -102,17 +114,22 @@ export class PropertyGroupsService {
       throw new NotFoundException('Property group not found');
     }
 
-    if (group.ownerId !== userId) {
+    if (!this.isAdmin(userRole) && group.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to view this property group');
     }
 
     return group;
   }
 
+  async findOne(id: string, userId: string, userRole?: string) {
+    return { success: true, data: await this.loadGroup(id, userId, userRole) };
+  }
+
   async update(
     id: string,
     updatePropertyGroupDto: UpdatePropertyGroupDto,
     userId: string,
+    userRole?: string,
   ) {
     const group = await this.prisma.propertyGroup.findUnique({
       where: { id },
@@ -122,18 +139,20 @@ export class PropertyGroupsService {
       throw new NotFoundException('Property group not found');
     }
 
-    if (group.ownerId !== userId) {
+    if (!this.isAdmin(userRole) && group.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to update this property group');
     }
 
-    return this.prisma.propertyGroup.update({
+    const updated = await this.prisma.propertyGroup.update({
       where: { id },
       data: updatePropertyGroupDto,
       include: { properties: true },
     });
+
+    return { success: true, data: updated };
   }
 
-  async remove(id: string, userId: string) {
+  async remove(id: string, userId: string, userRole?: string) {
     const group = await this.prisma.propertyGroup.findUnique({
       where: { id },
       include: { properties: true },
@@ -143,7 +162,7 @@ export class PropertyGroupsService {
       throw new NotFoundException('Property group not found');
     }
 
-    if (group.ownerId !== userId) {
+    if (!this.isAdmin(userRole) && group.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to delete this property group');
     }
 
@@ -157,14 +176,17 @@ export class PropertyGroupsService {
       where: { id },
     });
 
-    return { message: 'Property group deleted successfully' };
+    return { success: true, message: 'Property group deleted successfully' };
   }
 
   async addPropertyToGroup(
     groupId: string,
     propertyId: string,
     userId: string,
+    userRole?: string,
   ) {
+    const admin = this.isAdmin(userRole);
+
     const group = await this.prisma.propertyGroup.findUnique({
       where: { id: groupId },
     });
@@ -173,7 +195,7 @@ export class PropertyGroupsService {
       throw new NotFoundException('Property group not found');
     }
 
-    if (group.ownerId !== userId) {
+    if (!admin && group.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to modify this property group');
     }
 
@@ -185,20 +207,23 @@ export class PropertyGroupsService {
       throw new NotFoundException('Property not found');
     }
 
-    if (property.ownerId !== userId) {
+    if (!admin && property.ownerId !== userId) {
       throw new ForbiddenException('Property does not belong to you');
     }
 
-    return this.prisma.property.update({
+    const updated = await this.prisma.property.update({
       where: { id: propertyId },
       data: { propertyGroupId: groupId },
     });
+
+    return { success: true, data: updated };
   }
 
   async removePropertyFromGroup(
     groupId: string,
     propertyId: string,
     userId: string,
+    userRole?: string,
   ) {
     const group = await this.prisma.propertyGroup.findUnique({
       where: { id: groupId },
@@ -208,18 +233,21 @@ export class PropertyGroupsService {
       throw new NotFoundException('Property group not found');
     }
 
-    if (group.ownerId !== userId) {
+    if (!this.isAdmin(userRole) && group.ownerId !== userId) {
       throw new ForbiddenException('Unauthorized to modify this property group');
     }
 
-    return this.prisma.property.update({
+    const updated = await this.prisma.property.update({
       where: { id: propertyId },
       data: { propertyGroupId: null },
     });
+
+    return { success: true, data: updated };
   }
 
-  async getGroupAnalytics(groupId: string, userId: string) {
-    const group = await this.findOne(groupId, userId);
+  async getGroupAnalytics(groupId: string, userId: string, userRole?: string) {
+    // loadGroup, not findOne — findOne wraps its result in { success, data }.
+    const group = await this.loadGroup(groupId, userId, userRole);
 
     // Calculate aggregate analytics for all properties in group
     const properties = await this.prisma.property.findMany({

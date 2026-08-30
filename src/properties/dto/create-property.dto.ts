@@ -1,6 +1,13 @@
 import { IsString, IsNumber, IsBoolean, IsOptional, IsArray, IsEnum, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export enum PropertyStatus {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  MAINTENANCE = 'MAINTENANCE',
+  SUSPENDED = 'SUSPENDED',
+}
+
 export enum PropertyType {
   APARTMENT = 'APARTMENT',
   HOUSE = 'HOUSE',
@@ -199,5 +206,15 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   propertyGroupId?: string;
+
+  /**
+   * UpdatePropertyDto is a PartialType of this class, so without `status` here
+   * the global forbidNonWhitelisted pipe rejected any attempt to change a
+   * property's status — it could be displayed but never set.
+   */
+  @ApiPropertyOptional({ enum: PropertyStatus, default: PropertyStatus.ACTIVE })
+  @IsOptional()
+  @IsEnum(PropertyStatus)
+  status?: PropertyStatus;
 }
 

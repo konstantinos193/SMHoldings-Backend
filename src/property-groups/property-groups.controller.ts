@@ -37,49 +37,64 @@ export class PropertyGroupsController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.propertyGroupsService.findOne(id, userId);
+  findOne(@Param('id') id: string, @CurrentUserWithRole() user: any) {
+    return this.propertyGroupsService.findOne(id, user?.userId ?? user?.id, user?.role);
   }
 
   @Get(':id/analytics')
-  getAnalytics(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.propertyGroupsService.getGroupAnalytics(id, userId);
+  getAnalytics(@Param('id') id: string, @CurrentUserWithRole() user: any) {
+    return this.propertyGroupsService.getGroupAnalytics(
+      id,
+      user?.userId ?? user?.id,
+      user?.role,
+    );
   }
 
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() updatePropertyGroupDto: UpdatePropertyGroupDto,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.propertyGroupsService.update(id, updatePropertyGroupDto, userId);
+    return this.propertyGroupsService.update(
+      id,
+      updatePropertyGroupDto,
+      user?.userId ?? user?.id,
+      user?.role,
+    );
   }
 
   @Post(':id/properties/:propertyId')
   addProperty(
     @Param('id') id: string,
     @Param('propertyId') propertyId: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.propertyGroupsService.addPropertyToGroup(id, propertyId, userId);
+    return this.propertyGroupsService.addPropertyToGroup(
+      id,
+      propertyId,
+      user?.userId ?? user?.id,
+      user?.role,
+    );
   }
 
   @Delete(':id/properties/:propertyId')
   removeProperty(
     @Param('id') id: string,
     @Param('propertyId') propertyId: string,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
     return this.propertyGroupsService.removePropertyFromGroup(
       id,
       propertyId,
-      userId,
+      user?.userId ?? user?.id,
+      user?.role,
     );
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string, @CurrentUser() userId: string) {
-    return this.propertyGroupsService.remove(id, userId);
+  remove(@Param('id') id: string, @CurrentUserWithRole() user: any) {
+    return this.propertyGroupsService.remove(id, user?.userId ?? user?.id, user?.role);
   }
 }
 
