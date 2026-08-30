@@ -7,6 +7,29 @@ import { getPagination } from '../common/utils/pagination.util';
 export class AuditService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * A bare "2026-08-30" parses as UTC midnight, so the range both started three
+   * hours late and excluded everything logged on the end day. Treat a date-only
+   * value as a local calendar day.
+   */
+  private dayBound(value: string, edge: 'start' | 'end'): Date {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) return new Date(value);
+
+    const [, y, m, d] = match;
+    return edge === 'start'
+      ? new Date(+y, +m - 1, +d, 0, 0, 0, 0)
+      : new Date(+y, +m - 1, +d, 23, 59, 59, 999);
+  }
+
+  private startOfDay(value: string): Date {
+    return this.dayBound(value, 'start');
+  }
+
+  private endOfDay(value: string): Date {
+    return this.dayBound(value, 'end');
+  }
+
   async getAuditLogs(query: AuditLogsQueryDto) {
     const {
       page = 1,
@@ -46,21 +69,23 @@ export class AuditService {
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) {
-        where.createdAt.gte = new Date(startDate);
+        where.createdAt.gte = this.startOfDay(startDate);
       }
       if (endDate) {
-        where.createdAt.lte = new Date(endDate);
+        where.createdAt.lte = this.endOfDay(endDate);
       }
     }
 
     // Search filter (search in action, entityType, and metadata)
     if (search) {
+      // No `mode: 'insensitive'` — the datasource is SQLite, where Prisma rejects
+      // that argument outright. SQLite's LIKE is already case-insensitive for ASCII.
       where.OR = [
-        { action: { contains: search, mode: 'insensitive' } },
-        { entityType: { contains: search, mode: 'insensitive' } },
-        { entityId: { contains: search, mode: 'insensitive' } },
-        { user: { name: { contains: search, mode: 'insensitive' } } },
-        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { action: { contains: search } },
+        { entityType: { contains: search } },
+        { entityId: { contains: search } },
+        { user: { name: { contains: search } } },
+        { user: { email: { contains: search } } },
       ];
     }
 
@@ -137,17 +162,19 @@ export class AuditService {
     
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt.gte = new Date(startDate);
-      if (endDate) where.createdAt.lte = new Date(endDate);
+      if (startDate) where.createdAt.gte = this.startOfDay(startDate);
+      if (endDate) where.createdAt.lte = this.endOfDay(endDate);
     }
 
     if (search) {
+      // No `mode: 'insensitive'` — the datasource is SQLite, where Prisma rejects
+      // that argument outright. SQLite's LIKE is already case-insensitive for ASCII.
       where.OR = [
-        { action: { contains: search, mode: 'insensitive' } },
-        { entityType: { contains: search, mode: 'insensitive' } },
-        { entityId: { contains: search, mode: 'insensitive' } },
-        { user: { name: { contains: search, mode: 'insensitive' } } },
-        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { action: { contains: search } },
+        { entityType: { contains: search } },
+        { entityId: { contains: search } },
+        { user: { name: { contains: search } } },
+        { user: { email: { contains: search } } },
       ];
     }
 
@@ -183,27 +210,43 @@ export class AuditService {
       'Metadata',
     ];
 
-    const csvRows = [
-      headers.join(','),
+    const rows = [
+      headers,
       ...logs.map((log) => [
         log.id,
-        `"${log.user?.name || 'Unknown'}"`,
-        `"${log.user?.email || 'Unknown'}"`,
+        log.user?.name || 'Unknown',
+        log.user?.email || 'Unknown',
         log.user?.role || 'UNKNOWN',
         log.action,
         log.entityType,
         log.entityId || '',
-        `"${log.ipAddress || ''}"`,
-        `"${log.userAgent || ''}"`,
+        log.ipAddress || '',
+        log.userAgent || '',
         log.createdAt.toISOString(),
-        `"${JSON.stringify(log.changes || {}).replace(/"/g, '""')}"`,
-        `"${JSON.stringify(log.metadata || {}).replace(/"/g, '""')}"`,
-      ].join(',')),
+        JSON.stringify(log.changes || {}),
+        JSON.stringify(log.metadata || {}),
+      ]),
     ];
+
+    // `;` plus a UTF-8 BOM so Excel in a Greek locale opens the file with real
+    // columns and intact accents. Every field is escaped — a user name or
+    // user-agent containing a quote used to break the row apart.
+    const data =
+      '﻿' +
+      rows
+        .map((row) =>
+          row
+            .map((cell) => {
+              const value = String(cell ?? '');
+              return /[";\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+            })
+            .join(';'),
+        )
+        .join('\r\n');
 
     return {
       filename: `audit-logs-${new Date().toISOString().split('T')[0]}.csv`,
-      data: csvRows.join('\n'),
+      data,
     };
   }
 

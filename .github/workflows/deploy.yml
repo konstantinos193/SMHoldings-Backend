@@ -43,6 +43,35 @@ jobs:
     permissions:
       packages: read
     steps:
+      - uses: actions/checkout@v4
+
+      # The datasource has no `url` (Prisma reaches libsql through a runtime
+      # driver adapter), so `prisma migrate deploy` cannot apply anything from
+      # here — schema changes are applied by hand on the VPS. Ship the checker
+      # and the schema so the deploy can verify the DB is caught up first.
+      - name: Copy schema check to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "scripts/check-schema-drift.js,prisma/schema.prisma"
+          target: /root/deploy-check
+          overwrite: true
+
+      - name: Fail if the database is behind the schema
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          port: ${{ secrets.VPS_SSH_PORT }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            node /root/deploy-check/scripts/check-schema-drift.js \
+              --schema /root/deploy-check/prisma/schema.prisma \
+              --url http://127.0.0.1:8080
+
       - name: Blue-green deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:

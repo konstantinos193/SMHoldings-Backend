@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UserRole } from '../database/types';
-import * as fs from 'fs';
-import * as path from 'path';
 
 export interface ReportType {
   id: string;
@@ -13,17 +15,9 @@ export interface ReportType {
   category: string;
 }
 
-export interface Report {
-  id: string;
-  name: string;
-  type: string;
-  generatedDate: Date;
-  size: string;
-  status: 'Ready' | 'Generating' | 'Failed';
-  filePath?: string;
-  userId: string;
-  createdAt: Date;
-  updatedAt: Date;
+export interface GeneratedReport {
+  fileName: string;
+  csv: string;
 }
 
 @Injectable()
@@ -35,395 +29,330 @@ export class ReportsService {
       id: 'revenue',
       name: 'Revenue Report',
       nameGr: 'Αναφορά Εσόδων',
-      description: 'Monthly revenue analysis and breakdown',
-      descriptionGr: 'Μηνιαία ανάλυση και ανάλυση εσόδων',
+      description: 'Revenue per booking, with owner revenue and platform fees',
+      descriptionGr: 'Έσοδα ανά κράτηση, με καθαρά έσοδα ιδιοκτήτη και προμήθειες',
       category: 'Financial',
     },
     {
       id: 'bookings',
       name: 'Bookings Report',
       nameGr: 'Αναφορά Κρατήσεων',
-      description: 'Comprehensive booking analysis and trends',
-      descriptionGr: 'Ολοκληρωμένη ανάλυση και τάσεις κρατήσεων',
+      description: 'Every booking in the period with guest and source',
+      descriptionGr: 'Όλες οι κρατήσεις της περιόδου με επισκέπτη και πηγή',
       category: 'Operations',
     },
     {
       id: 'properties',
       name: 'Properties Performance',
       nameGr: 'Απόδοση Ακινήτων',
-      description: 'Property performance metrics and analytics',
-      descriptionGr: 'Μετρήσεις απόδοσης και αναλυτικά στοιχεία ακινήτων',
+      description: 'Bookings, revenue and ratings per property',
+      descriptionGr: 'Κρατήσεις, έσοδα και βαθμολογίες ανά ακίνητο',
       category: 'Performance',
     },
     {
       id: 'users',
       name: 'User Activity',
       nameGr: 'Δραστηριότητα Χρηστών',
-      description: 'User activity and engagement report',
-      descriptionGr: 'Αναφορά δραστηριότητας και αλληλεπίδρασης χρηστών',
+      description: 'Users registered in the period and their activity',
+      descriptionGr: 'Χρήστες που εγγράφηκαν στην περίοδο και η δραστηριότητά τους',
       category: 'Users',
     },
     {
       id: 'maintenance',
       name: 'Maintenance Report',
       nameGr: 'Αναφορά Συντήρησης',
-      description: 'Maintenance requests and resolution tracking',
-      descriptionGr: 'Παρακολούθηση αιτημάτων συντήρησης και επίλυσης',
+      description: 'Maintenance requests and their resolution',
+      descriptionGr: 'Αιτήματα συντήρησης και η επίλυσή τους',
       category: 'Operations',
     },
   ];
 
-  async getReports(userId: string): Promise<Report[]> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+  /** The user report is admin-only, so non-admins never see a card that would 403. */
+  async getReportTypes(userRole?: string) {
+    const isAdmin = userRole === 'ADMIN' || userRole === 'MANAGER';
+    const data = isAdmin
+      ? this.reportTypes
+      : this.reportTypes.filter((type) => type.id !== 'users');
 
-    // For now, return mock reports based on user role
-    // In a real implementation, these would be stored in the database
-    const reports: Report[] = [
-      {
-        id: '1',
-        name: 'Μηνιαία Αναφορά Εσόδων',
-        type: 'revenue',
-        generatedDate: new Date('2024-11-01'),
-        size: '2.4 MB',
-        status: 'Ready',
-        userId,
-        createdAt: new Date('2024-11-01'),
-        updatedAt: new Date('2024-11-01'),
-      },
-      {
-        id: '2',
-        name: 'Αναφορά Δραστηριότητας Χρηστών',
-        type: 'users',
-        generatedDate: new Date('2024-11-05'),
-        size: '1.8 MB',
-        status: 'Ready',
-        userId,
-        createdAt: new Date('2024-11-05'),
-        updatedAt: new Date('2024-11-05'),
-      },
-      {
-        id: '3',
-        name: 'Αναφορά Απόδοσης Ακινήτων',
-        type: 'properties',
-        generatedDate: new Date('2024-11-10'),
-        size: '3.2 MB',
-        status: 'Ready',
-        userId,
-        createdAt: new Date('2024-11-10'),
-        updatedAt: new Date('2024-11-10'),
-      },
-      {
-        id: '4',
-        name: 'Αναφορά Ανάλυσης Κρατήσεων',
-        type: 'bookings',
-        generatedDate: new Date('2024-11-12'),
-        size: '2.1 MB',
-        status: 'Generating',
-        userId,
-        createdAt: new Date('2024-11-12'),
-        updatedAt: new Date('2024-11-12'),
-      },
-    ];
-
-    return reports;
+    return { success: true, data };
   }
 
-  async generateReport(
+  /**
+   * Builds the report in memory and hands back the CSV. Reports are generated on
+   * demand rather than written to disk: the previous version wrote `<id>.csv` and
+   * then looked for `<id>.pdf` on download, and nothing recorded what it had
+   * generated, so no report was ever retrievable.
+   */
+  async buildReport(
     type: string,
-    period: string,
     startDate: Date,
     endDate: Date,
     userId: string,
-  ): Promise<{ message: string; reportId: string }> {
+  ): Promise<GeneratedReport> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    const reportType = this.reportTypes.find(rt => rt.id === type);
+    const reportType = this.reportTypes.find((rt) => rt.id === type);
     if (!reportType) {
       throw new BadRequestException('Invalid report type');
     }
 
-    const reportId = `report_${Date.now()}_${type}`;
-    
-    // Generate report based on type
+    const isAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
+    const rows = await this.buildRows(type, startDate, endDate, userId, isAdmin);
+    const stamp = `${this.toDateKey(startDate)}_${this.toDateKey(endDate)}`;
+
+    return { fileName: `${type}_${stamp}.csv`, csv: this.toCsv(rows) };
+  }
+
+  private async buildRows(
+    type: string,
+    startDate: Date,
+    endDate: Date,
+    userId: string,
+    isAdmin: boolean,
+  ): Promise<(string | number)[][]> {
+    // Non-admins only ever see their own properties' data.
+    const ownerScope = isAdmin ? {} : { property: { ownerId: userId } };
+
     switch (type) {
       case 'revenue':
-        await this.generateRevenueReport(reportId, startDate, endDate, userId);
-        break;
+        return this.revenueRows(startDate, endDate, ownerScope);
       case 'bookings':
-        await this.generateBookingsReport(reportId, startDate, endDate, userId);
-        break;
+        return this.bookingRows(startDate, endDate, ownerScope);
       case 'properties':
-        await this.generatePropertiesReport(reportId, startDate, endDate, userId);
-        break;
+        return this.propertyRows(startDate, endDate, userId, isAdmin);
       case 'users':
-        await this.generateUsersReport(reportId, startDate, endDate, userId);
-        break;
+        // The user report is platform-wide and cannot be scoped to one owner.
+        if (!isAdmin) {
+          throw new ForbiddenException('Insufficient permissions for the user report');
+        }
+        return this.userRows(startDate, endDate);
       case 'maintenance':
-        await this.generateMaintenanceReport(reportId, startDate, endDate, userId);
-        break;
+        return this.maintenanceRows(startDate, endDate, ownerScope);
       default:
         throw new BadRequestException('Unsupported report type');
     }
-
-    return {
-      message: 'Report generation started',
-      reportId,
-    };
   }
 
-  async downloadReport(reportId: string, userId: string): Promise<{ filePath: string; fileName: string }> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
-
-    // In a real implementation, check if user has access to this report
-    const filePath = path.join(process.cwd(), 'reports', `${reportId}.pdf`);
-    const fileName = `report_${reportId}.pdf`;
-
-    if (!fs.existsSync(filePath)) {
-      throw new NotFoundException('Report file not found');
-    }
-
-    return { filePath, fileName };
-  }
-
-  async getReportTypes(): Promise<ReportType[]> {
-    return this.reportTypes;
-  }
-
-  private async generateRevenueReport(reportId: string, startDate: Date, endDate: Date, userId: string) {
-    // Get revenue data
+  private async revenueRows(startDate: Date, endDate: Date, ownerScope: any) {
     const bookings = await this.prisma.booking.findMany({
       where: {
-        checkIn: { gte: startDate },
-        checkOut: { lte: endDate },
+        ...ownerScope,
+        checkIn: { gte: startDate, lte: endDate },
         status: { in: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] },
       },
-      include: {
-        property: {
-          select: {
-            titleEn: true,
-            titleGr: true,
-          },
-        },
-      },
+      orderBy: { checkIn: 'asc' },
+      include: { property: { select: { titleGr: true, titleEn: true } } },
     });
 
-    // Generate CSV content
-    const csvContent = this.generateRevenueCSV(bookings);
-    const filePath = path.join(process.cwd(), 'reports', `${reportId}.csv`);
-    
-    // Ensure reports directory exists
-    const reportsDir = path.dirname(filePath);
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
+    const rows: (string | number)[][] = [
+      [
+        'Ακίνητο',
+        'Επισκέπτης',
+        'Άφιξη',
+        'Αναχώρηση',
+        'Σύνολο',
+        'Έσοδα ιδιοκτήτη',
+        'Προμήθεια',
+        'Κατάσταση',
+      ],
+    ];
+
+    for (const booking of bookings) {
+      rows.push([
+        booking.property?.titleGr || booking.property?.titleEn || '',
+        booking.guestName,
+        this.toDateKey(booking.checkIn),
+        this.toDateKey(booking.checkOut),
+        booking.totalPrice ?? 0,
+        booking.ownerRevenue ?? 0,
+        booking.platformFee ?? 0,
+        booking.status,
+      ]);
     }
-    
-    fs.writeFileSync(filePath, csvContent);
+
+    return rows;
   }
 
-  private async generateBookingsReport(reportId: string, startDate: Date, endDate: Date, userId: string) {
+  private async bookingRows(startDate: Date, endDate: Date, ownerScope: any) {
     const bookings = await this.prisma.booking.findMany({
-      where: {
-        checkIn: { gte: startDate },
-        checkOut: { lte: endDate },
-      },
+      where: { ...ownerScope, checkIn: { gte: startDate, lte: endDate } },
+      orderBy: { checkIn: 'asc' },
       include: {
-        property: {
-          select: {
-            titleEn: true,
-            titleGr: true,
-          },
-        },
-        guest: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
+        property: { select: { titleGr: true, titleEn: true } },
+        guest: { select: { name: true, email: true } },
       },
     });
 
-    const csvContent = this.generateBookingsCSV(bookings);
-    const filePath = path.join(process.cwd(), 'reports', `${reportId}.csv`);
-    
-    const reportsDir = path.dirname(filePath);
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
+    const rows: (string | number)[][] = [
+      [
+        'Ακίνητο',
+        'Επισκέπτης',
+        'Email',
+        'Άφιξη',
+        'Αναχώρηση',
+        'Άτομα',
+        'Σύνολο',
+        'Κατάσταση',
+        'Πηγή',
+      ],
+    ];
+
+    for (const booking of bookings) {
+      rows.push([
+        booking.property?.titleGr || booking.property?.titleEn || '',
+        booking.guestName,
+        booking.guestEmail || booking.guest?.email || '',
+        this.toDateKey(booking.checkIn),
+        this.toDateKey(booking.checkOut),
+        booking.guests ?? 0,
+        booking.totalPrice ?? 0,
+        booking.status,
+        booking.source ?? '',
+      ]);
     }
-    
-    fs.writeFileSync(filePath, csvContent);
+
+    return rows;
   }
 
-  private async generatePropertiesReport(reportId: string, startDate: Date, endDate: Date, userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    
+  private async propertyRows(
+    startDate: Date,
+    endDate: Date,
+    userId: string,
+    isAdmin: boolean,
+  ) {
     const properties = await this.prisma.property.findMany({
-      where: user.role === 'ADMIN' ? {} : { ownerId: userId },
+      where: isAdmin ? {} : { ownerId: userId },
+      orderBy: { titleGr: 'asc' },
       include: {
         bookings: {
           where: {
-            checkIn: { gte: startDate },
-            checkOut: { lte: endDate },
+            checkIn: { gte: startDate, lte: endDate },
             status: { in: ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'] },
           },
         },
-        reviews: {
-          where: {
-            createdAt: { gte: startDate, lte: endDate },
-          },
-        },
+        reviews: { where: { createdAt: { gte: startDate, lte: endDate } } },
       },
     });
 
-    const csvContent = this.generatePropertiesCSV(properties);
-    const filePath = path.join(process.cwd(), 'reports', `${reportId}.csv`);
-    
-    const reportsDir = path.dirname(filePath);
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
+    const rows: (string | number)[][] = [
+      [
+        'Ακίνητο',
+        'Τύπος',
+        'Πόλη',
+        'Βασική τιμή',
+        'Κρατήσεις',
+        'Έσοδα',
+        'Μ.Ο. βαθμολογίας',
+        'Κριτικές',
+      ],
+    ];
+
+    for (const property of properties) {
+      const revenue = property.bookings.reduce(
+        (sum, booking) => sum + (booking.ownerRevenue ?? 0),
+        0,
+      );
+      const rating =
+        property.reviews.length > 0
+          ? property.reviews.reduce((sum, review) => sum + review.rating, 0) /
+            property.reviews.length
+          : 0;
+
+      rows.push([
+        property.titleGr || property.titleEn || '',
+        property.type,
+        property.city,
+        property.basePrice ?? 0,
+        property.bookings.length,
+        Math.round(revenue * 100) / 100,
+        rating > 0 ? rating.toFixed(2) : '',
+        property.reviews.length,
+      ]);
     }
-    
-    fs.writeFileSync(filePath, csvContent);
+
+    return rows;
   }
 
-  private async generateUsersReport(reportId: string, startDate: Date, endDate: Date, userId: string) {
+  private async userRows(startDate: Date, endDate: Date) {
     const users = await this.prisma.user.findMany({
-      where: {
-        createdAt: { gte: startDate, lte: endDate },
-      },
+      where: { createdAt: { gte: startDate, lte: endDate } },
+      orderBy: { createdAt: 'asc' },
       include: {
-        bookings: {
-          where: {
-            checkIn: { gte: startDate },
-            checkOut: { lte: endDate },
-          },
-        },
-        reviews: {
-          where: {
-            createdAt: { gte: startDate, lte: endDate },
-          },
-        },
+        bookings: { where: { checkIn: { gte: startDate, lte: endDate } } },
+        reviews: { where: { createdAt: { gte: startDate, lte: endDate } } },
       },
     });
 
-    const csvContent = this.generateUsersCSV(users);
-    const filePath = path.join(process.cwd(), 'reports', `${reportId}.csv`);
-    
-    const reportsDir = path.dirname(filePath);
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
+    const rows: (string | number)[][] = [
+      ['Όνομα', 'Email', 'Ρόλος', 'Ημ. εγγραφής', 'Κρατήσεις', 'Κριτικές'],
+    ];
+
+    for (const user of users) {
+      rows.push([
+        user.name || '',
+        user.email,
+        user.role,
+        this.toDateKey(user.createdAt),
+        user.bookings.length,
+        user.reviews.length,
+      ]);
     }
-    
-    fs.writeFileSync(filePath, csvContent);
+
+    return rows;
   }
 
-  private async generateMaintenanceReport(reportId: string, startDate: Date, endDate: Date, userId: string) {
-    const maintenance = await this.prisma.maintenanceRequest.findMany({
-      where: {
-        createdAt: { gte: startDate, lte: endDate },
-      },
-      include: {
-        property: {
-          select: {
-            titleEn: true,
-            titleGr: true,
-          },
-        },
-      },
+  private async maintenanceRows(startDate: Date, endDate: Date, ownerScope: any) {
+    const requests = await this.prisma.maintenanceRequest.findMany({
+      where: { ...ownerScope, createdAt: { gte: startDate, lte: endDate } },
+      orderBy: { createdAt: 'asc' },
+      include: { property: { select: { titleGr: true, titleEn: true } } },
     });
 
-    const csvContent = this.generateMaintenanceCSV(maintenance);
-    const filePath = path.join(process.cwd(), 'reports', `${reportId}.csv`);
-    
-    const reportsDir = path.dirname(filePath);
-    if (!fs.existsSync(reportsDir)) {
-      fs.mkdirSync(reportsDir, { recursive: true });
+    const rows: (string | number)[][] = [
+      ['Ακίνητο', 'Τίτλος', 'Προτεραιότητα', 'Κατάσταση', 'Δημιουργήθηκε', 'Ολοκληρώθηκε'],
+    ];
+
+    for (const request of requests) {
+      rows.push([
+        request.property?.titleGr || request.property?.titleEn || '',
+        request.title,
+        request.priority,
+        request.status,
+        this.toDateKey(request.createdAt),
+        request.completedAt ? this.toDateKey(request.completedAt) : '',
+      ]);
     }
-    
-    fs.writeFileSync(filePath, csvContent);
+
+    return rows;
   }
 
-  private generateRevenueCSV(bookings: any[]): string {
-    const headers = ['Property', 'Guest Name', 'Check In', 'Check Out', 'Total Price', 'Owner Revenue', 'Platform Fee', 'Status'];
-    const rows = bookings.map(booking => [
-      booking.property.titleEn,
-      booking.guestName,
-      booking.checkIn.toISOString().split('T')[0],
-      booking.checkOut.toISOString().split('T')[0],
-      booking.totalPrice.toString(),
-      booking.ownerRevenue?.toString() || '0',
-      booking.platformFee?.toString() || '0',
-      booking.status,
-    ]);
-
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
+  private toDateKey(date: Date): string {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate(),
+    ).padStart(2, '0')}`;
   }
 
-  private generateBookingsCSV(bookings: any[]): string {
-    const headers = ['Property', 'Guest Name', 'Guest Email', 'Check In', 'Check Out', 'Total Price', 'Status', 'Source'];
-    const rows = bookings.map(booking => [
-      booking.property.titleEn,
-      booking.guestName,
-      booking.guest.email,
-      booking.checkIn.toISOString().split('T')[0],
-      booking.checkOut.toISOString().split('T')[0],
-      booking.totalPrice.toString(),
-      booking.status,
-      booking.source,
-    ]);
+  /**
+   * `;` separator plus a UTF-8 BOM so Excel in a Greek locale opens the file with
+   * real columns and intact accents. Values are quoted — a property title with a
+   * comma used to shift every following column.
+   */
+  private toCsv(rows: (string | number)[][]): string {
+    const body = rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const value = String(cell ?? '');
+            return /[";\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+          })
+          .join(';'),
+      )
+      .join('\r\n');
 
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
-  }
-
-  private generatePropertiesCSV(properties: any[]): string {
-    const headers = ['Property', 'Type', 'City', 'Base Price', 'Total Bookings', 'Total Revenue', 'Average Rating', 'Total Reviews'];
-    const rows = properties.map(property => [
-      property.titleEn,
-      property.type,
-      property.city,
-      property.basePrice.toString(),
-      property.bookings.length.toString(),
-      property.bookings.reduce((sum, b) => sum + (b.ownerRevenue || 0), 0).toString(),
-      property.reviews.length > 0 ? (property.reviews.reduce((sum, r) => sum + r.rating, 0) / property.reviews.length).toFixed(2) : '0',
-      property.reviews.length.toString(),
-    ]);
-
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
-  }
-
-  private generateUsersCSV(users: any[]): string {
-    const headers = ['Name', 'Email', 'Role', 'Registration Date', 'Total Bookings', 'Total Reviews'];
-    const rows = users.map(user => [
-      user.name || '',
-      user.email,
-      user.role,
-      user.createdAt.toISOString().split('T')[0],
-      user.bookings.length.toString(),
-      user.reviews.length.toString(),
-    ]);
-
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
-  }
-
-  private generateMaintenanceCSV(maintenance: any[]): string {
-    const headers = ['Property', 'Title', 'Priority', 'Status', 'Created Date', 'Completed Date'];
-    const rows = maintenance.map(request => [
-      request.property.titleEn,
-      request.title,
-      request.priority,
-      request.status,
-      request.createdAt.toISOString().split('T')[0],
-      request.completedAt ? request.completedAt.toISOString().split('T')[0] : '',
-    ]);
-
-    return [headers, ...rows].map(row => row.join(',')).join('\n');
+    return `﻿${body}`;
   }
 }

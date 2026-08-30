@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -24,7 +25,12 @@ async function bootstrap() {
   console.log('🔧 Database connection configured');
   console.log(`   Connection: ${maskedDbUrl.substring(0, 80)}${maskedDbUrl.length > 80 ? '...' : ''}`);
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // The API runs behind nginx, so req.ip was the Docker bridge address
+  // (::ffff:172.18.0.1) on every request and every audit-log entry recorded it
+  // instead of the client. Trust the first hop only — the immediate proxy.
+  app.set('trust proxy', 1);
 
   // Increase body size limits for file uploads
   const express = require('express');
