@@ -1,5 +1,6 @@
 allowBuilds:
   '@nestjs/core': true
+  '@parcel/watcher': false
   '@prisma/engines': true
   '@scarf/scarf': true
   '@swc/core': false
@@ -19,27 +20,17 @@ minimumReleaseAgeExclude:
   - '@nestjs/core@11.1.26'
   - '@nestjs/platform-express@11.1.26'
   - '@nestjs/testing@11.1.26'
-  - '@typescript-eslint/eslint-plugin@8.61.0'
-  - '@typescript-eslint/parser@8.61.0'
-  - '@typescript-eslint/project-service@8.61.0'
-  - '@typescript-eslint/scope-manager@8.61.0'
-  - '@typescript-eslint/tsconfig-utils@8.61.0'
-  - '@typescript-eslint/type-utils@8.61.0'
-  - '@typescript-eslint/types@8.61.0'
-  - '@typescript-eslint/typescript-estree@8.61.0'
-  - '@typescript-eslint/utils@8.61.0'
-  - '@typescript-eslint/visitor-keys@8.61.0'
-  - '@typescript-eslint/eslint-plugin@8.61.1'
-  - '@typescript-eslint/parser@8.61.1'
-  - '@typescript-eslint/project-service@8.61.1'
-  - '@typescript-eslint/scope-manager@8.61.1'
-  - '@typescript-eslint/tsconfig-utils@8.61.1'
-  - '@typescript-eslint/type-utils@8.61.1'
-  - '@typescript-eslint/types@8.61.1'
-  - '@typescript-eslint/typescript-estree@8.61.1'
-  - '@typescript-eslint/utils@8.61.1'
-  - '@typescript-eslint/visitor-keys@8.61.1'
-  - ts-loader@9.6.1
+  - '@typescript-eslint/eslint-plugin@8.61.0 || 8.61.1'
+  - '@typescript-eslint/parser@8.61.0 || 8.61.1'
+  - '@typescript-eslint/project-service@8.61.0 || 8.61.1'
+  - '@typescript-eslint/scope-manager@8.61.0 || 8.61.1'
+  - '@typescript-eslint/tsconfig-utils@8.61.0 || 8.61.1'
+  - '@typescript-eslint/type-utils@8.61.0 || 8.61.1'
+  - '@typescript-eslint/types@8.61.0 || 8.61.1'
+  - '@typescript-eslint/typescript-estree@8.61.0 || 8.61.1'
+  - '@typescript-eslint/utils@8.61.0 || 8.61.1'
+  - '@typescript-eslint/visitor-keys@8.61.0 || 8.61.1'
+  - ts-loader@9.6.1 || 9.6.2
   - '@swc/core-darwin-arm64@1.15.43'
   - '@swc/core-darwin-x64@1.15.43'
   - '@swc/core-linux-arm-gnueabihf@1.15.43'
@@ -53,5 +44,5 @@ minimumReleaseAgeExclude:
   - '@swc/core-win32-ia32-msvc@1.15.43'
   - '@swc/core-win32-x64-msvc@1.15.43'
   - '@swc/core@1.15.43'
-  - ts-loader@9.6.2
   - tsx@4.23.0
+  - zod@4.5.4
