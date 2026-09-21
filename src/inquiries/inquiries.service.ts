@@ -1,7 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { UpdateInquiryDto } from './dto/update-inquiry.dto';
+import { ContactInquiryDto, ContactSubject } from './dto/contact-inquiry.dto';
+
+const CONTACT_SUBJECT_LABEL: Record<ContactSubject, string> = {
+  owner: 'Property owner — advice',
+  rent: 'Looking to rent',
+  buy: 'Looking to buy',
+  management: 'Property management request',
+  investment: 'Investment guidance',
+  other: 'General enquiry',
+};
 
 const PROPERTY_SELECT = {
   id: true,
@@ -14,7 +26,44 @@ const ASSIGNEE_SELECT = { id: true, name: true, email: true };
 
 @Injectable()
 export class InquiriesService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(InquiriesService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private email: EmailService,
+  ) {}
+
+  /**
+   * Website contact form (smholdings.gr/contact). Not tied to a property, so it
+   * is emailed to the office and confirmed to the sender rather than stored in
+   * the property-bound Inquiry table.
+   */
+  async contact(dto: ContactInquiryDto) {
+    const reference = randomUUID();
+    const subject = CONTACT_SUBJECT_LABEL[dto.subject] ?? CONTACT_SUBJECT_LABEL.other;
+    const context = [subject, dto.propertyLocation && `Location: ${dto.propertyLocation}`, dto.phone && `Phone: ${dto.phone}`]
+      .filter(Boolean)
+      .join(' · ');
+
+    const payload = {
+      inquiryId: reference,
+      guestName: dto.name,
+      guestEmail: dto.email,
+      propertyName: context,
+      message: dto.message,
+      lang: dto.lang ?? 'en',
+    };
+
+    try {
+      await this.email.sendInquiryNotificationToAdmin(payload);
+      await this.email.sendInquiryConfirmationToGuest(payload);
+    } catch (err) {
+      this.logger.error(`Contact enquiry email failed (${reference})`, err instanceof Error ? err.stack : String(err));
+      throw err;
+    }
+
+    return { success: true, reference: reference.slice(-8).toUpperCase() };
+  }
 
   async create(createInquiryDto: CreateInquiryDto) {
     const { propertyId, ...inquiryData } = createInquiryDto;
