@@ -13,6 +13,7 @@ import {
 import { InquiriesService } from './inquiries.service';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { UpdateInquiryDto } from './dto/update-inquiry.dto';
+import { ContactInquiryDto } from './dto/contact-inquiry.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -25,6 +26,12 @@ export class InquiriesController {
   @Post()
   create(@Body() createInquiryDto: CreateInquiryDto) {
     return this.inquiriesService.create(createInquiryDto);
+  }
+
+  /** Public: general contact form from the website (no property). */
+  @Post('contact')
+  contact(@Body() dto: ContactInquiryDto) {
+    return this.inquiriesService.contact(dto);
   }
 
   @Get()

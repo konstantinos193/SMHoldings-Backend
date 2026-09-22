@@ -13,6 +13,8 @@ import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserWithRole } from '../common/decorators/current-user-with-role.decorator';
 
@@ -27,6 +29,18 @@ export class ReviewsController {
     @Query('limit') limit?: number,
   ) {
     return this.reviewsService.findAll(propertyId, page, limit);
+  }
+
+  /** Admin listing: includes reviews hidden from the public site. */
+  @Get('admin/all')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'MANAGER')
+  findAllForAdmin(
+    @Query('propertyId') propertyId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.reviewsService.findAll(propertyId, page, limit, true);
   }
 
   @Get('property/:propertyId')
@@ -53,9 +67,14 @@ export class ReviewsController {
   update(
     @Param('id') id: string,
     @Body() updateReviewDto: UpdateReviewDto,
-    @CurrentUser() userId: string,
+    @CurrentUserWithRole() user: any,
   ) {
-    return this.reviewsService.update(id, updateReviewDto, userId);
+    return this.reviewsService.update(
+      id,
+      updateReviewDto,
+      user?.userId ?? user?.id,
+      user?.role,
+    );
   }
 
   @Delete(':id')
