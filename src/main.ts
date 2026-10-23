@@ -8,6 +8,7 @@ import morgan from 'morgan';
 const compression = require('compression');
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { AppLogger } from './common/logging/app-logger.service';
 
 async function bootstrap() {
   // Validate DATABASE_URL is set
@@ -98,8 +99,19 @@ async function bootstrap() {
     crossOriginEmbedderPolicy: false,
   }));
 
-  // Logging
-  app.use(morgan('combined'));
+  // Route every logger — including the ~12 `new Logger(X.name)` call sites —
+  // through the channel logger: daily-rotated files under LOG_DIR plus stdout.
+  const appLogger = app.get(AppLogger);
+  app.useLogger(appLogger);
+
+  // Request log goes to the http channel file instead of raw stdout.
+  app.use(
+    morgan('combined', {
+      stream: {
+        write: (line: string) => appLogger.channel('http').info(line.trimEnd()),
+      },
+    }),
+  );
 
   // Global prefix
   app.setGlobalPrefix('api');
@@ -108,7 +120,7 @@ async function bootstrap() {
   app.use(express.static('public'));
 
   // Global exception filter
-  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalFilters(new AllExceptionsFilter(appLogger));
 
   // Global validation pipe
   app.useGlobalPipes(

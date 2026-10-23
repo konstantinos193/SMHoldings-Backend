@@ -55,7 +55,7 @@ export class PaymentsService {
       mode: 'payment',
       success_url: dto.successUrl,
       cancel_url: dto.cancelUrl,
-      payment_method_types: ['card'],
+      allowed_payment_method_types: ['card'],
       customer_email: dto.guestEmail,
       line_items: [
         {
@@ -135,7 +135,7 @@ export class PaymentsService {
       const paymentIntent = await this.stripe.paymentIntents.create({
         amount: Math.round(createPaymentDto.amount * 100), // Convert to cents
         currency: createPaymentDto.currency || 'eur',
-        payment_method_types: this.getStripePaymentMethods(createPaymentDto.method),
+        allowed_payment_method_types: this.getStripePaymentMethods(createPaymentDto.method),
         metadata: {
           bookingId: booking.id,
           propertyId: booking.propertyId,
