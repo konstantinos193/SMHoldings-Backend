@@ -45,7 +45,7 @@ echo "[deploy] $ACTIVE->$NEW :$NEW_PORT"
 docker pull "$IMAGE"
 docker stop stefanos-$NEW 2>/dev/null || true
 docker rm stefanos-$NEW 2>/dev/null || true
-docker run -d --name stefanos-$NEW --network stefanos-net --add-host=host.docker.internal:172.17.0.1 --restart unless-stopped --env-file /root/stefanos.env -p $NEW_PORT:3001 "$IMAGE"
+docker run -d --name stefanos-$NEW --network stefanos-net --add-host=host.docker.internal:172.17.0.1 --restart unless-stopped -v /root/stefanos-logs:/app/logs --env-file /root/stefanos.env -p 127.0.0.1:$NEW_PORT:3001 "$IMAGE"
 HEALTHY=0
 for i in $(seq 1 30); do
   (echo >/dev/tcp/127.0.0.1/${NEW_PORT}) 2>/dev/null && HEALTHY=1 && break
@@ -57,15 +57,26 @@ if [ $HEALTHY -eq 0 ]; then
   docker rm stefanos-$NEW 2>/dev/null || true
   exit 1
 fi
-cat > /etc/nginx/conf.d/stefanos-upstream.conf <<EOF
+# When the Traefik edge is installed its watched directory exists and the
+# route script repoints api.smholdings.gr at the new colour (and proves
+# Traefik loaded it). Otherwise this host still runs nginx and the upstream
+# file is rewritten the way it always was. install.sh rollback renames the
+# directory, which puts every deploy back on nginx.
+if [ -d /etc/stefanos/traefik/dynamic ]; then
+  bash /root/deploy-traefik-route.sh "stefanos-$NEW"
+  echo $NEW > /root/.active_color
+  echo "[deploy] traefik->$NEW"
+else
+  cat > /etc/nginx/conf.d/stefanos-upstream.conf <<EOF
 upstream stefanos_backend {
   server 127.0.0.1:${NEW_PORT};
   keepalive 32;
 }
 EOF
-nginx -t && nginx -s reload
-echo $NEW > /root/.active_color
-echo "[deploy] nginx->$NEW :$NEW_PORT"
+  nginx -t && nginx -s reload
+  echo $NEW > /root/.active_color
+  echo "[deploy] nginx->$NEW :$NEW_PORT"
+fi
 sleep 5
 docker stop stefanos-$OLD 2>/dev/null || true
 docker rm stefanos-$OLD 2>/dev/null || true

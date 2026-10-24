@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 
 RUN npm install -g pnpm
@@ -10,7 +10,7 @@ COPY . .
 RUN DATABASE_URL=file:./dummy.db pnpm build
 
 # ── Production image ──────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app
 
 ENV NODE_ENV=production

@@ -34,6 +34,7 @@ import { AuditModule } from './audit/audit.module';
 import { EmailModule } from './email/email.module';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { LoggingModule } from './common/logging/logging.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
         ttl: 0, // per-call TTL; no global default
       }),
     }),
+    LoggingModule,
     DatabaseModule,
     AuthModule,
     UsersModule,

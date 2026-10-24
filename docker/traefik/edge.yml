@@ -1,0 +1,109 @@
+################################################################################
+# Traefik dynamic configuration -- the host-wide edge rules (stefanos)
+#
+# Installed to /etc/stefanos/traefik/dynamic/00-edge.yml by
+# docker/traefik/install.sh and re-installed by deploy-traefik-route.sh on
+# every deploy -- a file that only exists on the box is a file no rebuild
+# brings back.
+#
+# Middlewares are named `st-*` and referenced by name from api.yml, the file
+# deploy-traefik-route.sh writes. All files in dynamic/ are one provider
+# (@file), so a name defined here is visible from every one of them.
+#
+# Direct-traffic host: no CDN in front, so there are no -cf (Cloudflare
+# ipStrategy) variants -- Traefik rewrites X-Forwarded-For from the peer
+# address and rate limits key on the real client IP.
+################################################################################
+
+tls:
+  options:
+    default:
+      # nginx: ssl_protocols TLSv1.2 TLSv1.3.
+      minVersion: VersionTLS12
+
+http:
+  middlewares:
+    # nginx: gzip on. Traefik picks gzip/brotli/zstd from Accept-Encoding and
+    # never recompresses a response that already has Content-Encoding.
+    st-compress:
+      compress:
+        minResponseBodyBytes: 256
+
+    # Security headers. The Nest app also sets its own via helmet; Traefik
+    # overrides duplicates, so the edge value is the one served -- including
+    # on responses that never reach the app (403s from the catch-all, ACME).
+    st-secure-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        # Not preload: submission to hstspreload.org is a separate, manual step.
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: strict-origin-when-cross-origin
+        customResponseHeaders:
+          # An API host has nothing to index.
+          X-Robots-Tag: "noindex, nofollow"
+
+    # --------------------------------------------------------------------------
+    # Rate limits -- same token-bucket shape nginx limit_req would give.
+    # average = requests/second refill, burst = bucket size.
+    # The old nginx config had no limits at all; these are new defences sized
+    # from the hotelpoint edge, which carries a much busier API on the same
+    # 30r/s.
+    # --------------------------------------------------------------------------
+
+    # Whole-API surface: 30r/s, burst 61.
+    st-ratelimit-api:
+      rateLimit:
+        average: 30
+        burst: 61
+
+    # /api/auth/* (login, refresh, password): a security control, not a
+    # capacity one. 1r/s, burst 6 -- the same shape as hotelpoint_auth.
+    st-ratelimit-auth:
+      rateLimit:
+        average: 1
+        burst: 6
+
+    # nginx limit_conn 40 equivalent: concurrent requests in flight per
+    # address. Over HTTP/2 this is the closer measure of what one client is
+    # holding open anyway.
+    st-inflight:
+      inFlightReq:
+        amount: 40
+
+    # --------------------------------------------------------------------------
+    # Access control
+    # --------------------------------------------------------------------------
+    # nginx: `allow 127.0.0.1; deny all;` -- for anything that must never be
+    # public (metrics, internal probes).
+    st-loopback-only:
+      ipAllowList:
+        sourceRange:
+          - 127.0.0.1/32
+          - ::1/128
+
+    # Refuses everyone: an allow list nothing can match. Traefik cannot 444
+    # (close the connection) from a middleware; a 403 from the edge is equally
+    # cheap and keeps the scanner out of the app entirely.
+    st-deny:
+      ipAllowList:
+        sourceRange:
+          - 255.255.255.255/32
+
+  routers:
+    # Requests for a host nobody serves: the bare IP, random Host headers,
+    # scanners. Without it, the api router would only match on its own Host
+    # anyway and Traefik would answer 404 -- fine -- but this also cuts the
+    # TLS handshake noise early with a cheap edge 403. Priority 1 so every
+    # real router wins. `tls: {}` so Traefik does not try to get a certificate
+    # for a rule that names no host.
+    st-catch-all:
+      entryPoints:
+        - websecure
+      rule: "PathPrefix(`/`)"
+      priority: 1
+      middlewares:
+        - st-deny
+      service: noop@internal
+      tls: {}
