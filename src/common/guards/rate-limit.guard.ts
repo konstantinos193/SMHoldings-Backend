@@ -16,10 +16,11 @@ export class RateLimitGuard extends ThrottlerGuard {
       return true;
     }
     
-    // Skip rate limiting for admin panel requests (check origin)
+    // Skip rate limiting for admin panel requests: configured ADMIN_URL or a
+    // stefanos-admin*.vercel.app deployment/preview origin.
     const origin = request.headers.origin || '';
     const adminUrl = process.env.ADMIN_URL || 'http://localhost:3002';
-    if (origin === adminUrl || origin.includes('admin') || origin.includes('3002')) {
+    if (origin === adminUrl || /^https:\/\/stefanos-admin[a-z0-9-]*\.vercel\.app$/i.test(origin)) {
       return true;
     }
     
