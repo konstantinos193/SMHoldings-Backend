@@ -61,8 +61,9 @@ async function bootstrap() {
         return callback(null, true);
       }
       
-      // Always allow admin panel - check if it's from admin URL or contains admin indicators
-      if (origin === adminUrl || origin.includes('admin') || origin.includes('3002')) {
+      // Always allow the admin panel: the configured ADMIN_URL or any
+      // stefanos-admin*.vercel.app deployment/preview.
+      if (origin === adminUrl || /^https:\/\/stefanos-admin[a-z0-9-]*\.vercel\.app$/i.test(origin)) {
         return callback(null, true);
       }
 
